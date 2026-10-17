@@ -46,7 +46,7 @@ from reachy_mini_conversation_app.prompts import (
     get_session_instructions,
     get_session_greeting_prompt,
 )
-from reachy_mini_conversation_app.streaming import AdditionalOutputs, audio_to_int16
+from reachy_mini_conversation_app.streaming import AdditionalOutputs, audio_to_int16, normalize_audio_frame
 from reachy_mini_conversation_app.tools.core_tools import (
     ToolSpec,
     ToolDependencies,
@@ -264,7 +264,7 @@ class HuggingFaceRealtimeHandler(ConversationHandler):
                         ),
                         turn_detection=ServerVad(
                             type="server_vad",
-                            threshold=0.6,
+                            threshold=0.4,
                             prefix_padding_ms=300,
                             silence_duration_ms=600,
                             create_response=True,
@@ -294,7 +294,7 @@ class HuggingFaceRealtimeHandler(ConversationHandler):
                     ),
                     turn_detection=ServerVad(
                         type="server_vad",
-                        threshold=0.6,
+                        threshold=0.4,
                         prefix_padding_ms=300,
                         silence_duration_ms=600,
                         create_response=True,
@@ -1060,8 +1060,8 @@ class HuggingFaceRealtimeHandler(ConversationHandler):
             if audio_frame.shape[1] > 1:
                 audio_frame = audio_frame[:, 0]
 
-        # Cast if needed
-        audio_frame = audio_to_int16(audio_frame)
+        # Normalize and cast if needed
+        audio_frame = audio_to_int16(normalize_audio_frame(audio_frame))
 
         if get_conversation_backend() == OPENAI_BACKEND:
             # OpenAI Realtime expects 24 kHz audio. Resample 16 kHz -> 24 kHz.

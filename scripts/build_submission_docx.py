@@ -437,6 +437,7 @@ def populate_result_report(src_path, dst_path):
 
 
 def main():
+    """Generate filled submission docx files."""
     repo_root = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
     report_dir = os.path.join(repo_root, "docs", "oss_report")
 

@@ -48,3 +48,32 @@ def test_audio_converters_reject_unsupported_dtype() -> None:
 
     with pytest.raises(TypeError, match="Unsupported audio data type"):
         audio_to_int16(audio)
+
+
+def test_audio_to_int16_clamps_overflow() -> None:
+    """Out-of-range float audio should clamp safely instead of integer overflow."""
+    audio = np.array([-2.5, 2.5], dtype=np.float32)
+
+    np.testing.assert_array_equal(audio_to_int16(audio), np.array([-32767, 32767], dtype=np.int16))
+
+
+def test_normalize_audio_frame_levels_loud_audio() -> None:
+    """Loud audio exceeding target peak should be scaled down to target peak."""
+    from reachy_mini_conversation_app.streaming import normalize_audio_frame
+
+    loud = np.array([-1.4, 0.0, 1.4], dtype=np.float32)
+    normalized = normalize_audio_frame(loud, target_peak=0.70)
+
+    assert np.isclose(np.max(np.abs(normalized)), 0.70)
+    assert np.all(normalized <= 1.0)
+    assert np.all(normalized >= -1.0)
+
+
+def test_normalize_audio_frame_preserves_quiet_audio() -> None:
+    """Audio below target peak should be preserved without gain amplification."""
+    from reachy_mini_conversation_app.streaming import normalize_audio_frame
+
+    quiet = np.array([-0.3, 0.0, 0.4], dtype=np.float32)
+    normalized = normalize_audio_frame(quiet, target_peak=0.70)
+
+    np.testing.assert_array_equal(normalized, quiet)

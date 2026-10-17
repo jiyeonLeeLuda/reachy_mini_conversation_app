@@ -1132,12 +1132,9 @@ class LocalStream:
             if audio_frame is not None and not self._mic_muted:
                 processed_frame, is_gated = self._audio_service.process_noise_gate(audio_frame)
                 if not is_gated:
-                    audio_int16 = audio_to_int16(processed_frame)
-                else:
-                    # Send silence to keep the server VAD stream continuous;
-                    # zeroed frames prevent noise triggering while preserving turn detection.
-                    audio_int16 = audio_to_int16(np.zeros_like(audio_frame))
-                await self.handler.receive((input_sample_rate, audio_int16))
+                    leveled_frame = self._audio_service.normalize_audio(processed_frame)
+                    audio_int16 = audio_to_int16(leveled_frame)
+                    await self.handler.receive((input_sample_rate, audio_int16))
                 self._emit_level("user", audio_frame, is_gated=is_gated)
             await asyncio.sleep(0)  # avoid busy loop
 

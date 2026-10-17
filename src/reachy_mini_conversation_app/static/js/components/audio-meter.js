@@ -176,22 +176,11 @@ export function createAudioMeter() {
 
   async function loadNoiseGate() {
     try {
-      const saved = localStorage.getItem("reachy_mini_noise_gate");
       const res = await fetch("/api/audio/noise_gate");
       if (res.ok) {
         const data = await res.json();
         const serverPct = Math.round((data.threshold || 0) * 100);
-        const finalPct = saved !== null ? parseInt(saved, 10) : (serverPct || 15);
-        if (saved !== null && finalPct !== serverPct) {
-          void fetch(`/api/audio/noise_gate?threshold=${(finalPct / 100).toFixed(2)}`, {
-            method: "POST",
-          });
-        } else if (saved === null && serverPct === 0) {
-          void fetch(`/api/audio/noise_gate?threshold=0.15`, {
-            method: "POST",
-          });
-        }
-        updateNoiseGateUI(finalPct);
+        updateNoiseGateUI(serverPct);
       }
     } catch (e) {
       console.debug("Failed loading noise gate", e);

@@ -5,6 +5,7 @@ from pathlib import Path
 
 
 async def render_with_playwright(html_path: Path, output_png: Path):
+    """Render diagram HTML with Playwright."""
     from playwright.async_api import async_playwright
 
     async with async_playwright() as p:
@@ -17,6 +18,7 @@ async def render_with_playwright(html_path: Path, output_png: Path):
 
 
 def render_with_selenium(html_path: Path, output_png: Path):
+    """Render diagram HTML with Selenium."""
     from selenium import webdriver
     from selenium.webdriver.chrome.options import Options
 
@@ -37,6 +39,7 @@ def render_with_selenium(html_path: Path, output_png: Path):
 
 
 def render_with_edge(html_path: Path, output_png: Path):
+    """Render diagram HTML with Edge headless browser."""
     import subprocess
 
     edge_paths = [
@@ -61,6 +64,7 @@ def render_with_edge(html_path: Path, output_png: Path):
 
 
 def main():
+    """Export architecture diagram to PNG."""
     repo_root = Path(__file__).resolve().parent.parent
     html_path = repo_root / "docs" / "oss_report" / "assets" / "architecture_diagram.html"
     output_png = repo_root / "docs" / "oss_report" / "assets" / "architecture_diagram.png"

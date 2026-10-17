@@ -16,15 +16,17 @@ import numpy as np
 from openai import AsyncOpenAI
 from numpy.typing import NDArray
 from openai.types.realtime import (
+    AudioTranscriptionParam,
     RealtimeAudioConfigParam,
     RealtimeAudioConfigInputParam,
+    RealtimeAudioConfigOutputParam,
     RealtimeSessionCreateRequestParam,
 )
 from openai.types.realtime.realtime_audio_input_turn_detection_param import ServerVad
 
 from reachy_mini_conversation_app.config import OPENAI_REALTIME_URL, DEFAULT_OPENAI_VOICE, config
 from reachy_mini_conversation_app.prompts import get_session_voice
-from reachy_mini_conversation_app.streaming import audio_to_int16
+from reachy_mini_conversation_app.streaming import audio_to_int16, normalize_audio_frame
 from reachy_mini_conversation_app.tools.core_tools import ToolSpec
 from reachy_mini_conversation_app.conversation_handler import HandlerOutput
 from reachy_mini_conversation_app.huggingface_realtime import (
@@ -274,7 +276,7 @@ class OpenAIRealtimeHandler(HuggingFaceRealtimeHandler):
         else:
             turn_detection = ServerVad(
                 type="server_vad",
-                threshold=0.6,
+                threshold=0.4,
                 prefix_padding_ms=300,
                 silence_duration_ms=600,
                 create_response=True,
@@ -284,8 +286,20 @@ class OpenAIRealtimeHandler(HuggingFaceRealtimeHandler):
             await self.connection.session.update(
                 session=RealtimeSessionCreateRequestParam(
                     type="realtime",
+                    output_modalities=["audio"],
                     audio=RealtimeAudioConfigParam(
-                        input=RealtimeAudioConfigInputParam(turn_detection=turn_detection),
+                        input=RealtimeAudioConfigInputParam(
+                            format=_pcm_24k_format(),  # type: ignore[typeddict-item]
+                            transcription=AudioTranscriptionParam(
+                                model="whisper-1",
+                                language=config.REALTIME_TRANSCRIPTION_LANGUAGE,
+                            ),
+                            turn_detection=turn_detection,
+                        ),
+                        output=RealtimeAudioConfigOutputParam(
+                            format=_pcm_24k_format(),  # type: ignore[typeddict-item]
+                            voice=self.get_current_voice(),
+                        ),
                     ),
                 ),
             )
@@ -304,7 +318,7 @@ class OpenAIRealtimeHandler(HuggingFaceRealtimeHandler):
                     "content": [{"type": "input_text", "text": WAKE_GREETING_PROMPT}],
                 },
             )
-            await self._safe_response_create()
+            await self._safe_response_create(response={"output_modalities": ["audio"]})
         except Exception as e:
             logger.warning("Failed to queue wake greeting: %s", e)
 
@@ -325,7 +339,7 @@ class OpenAIRealtimeHandler(HuggingFaceRealtimeHandler):
                     "content": [{"type": "input_text", "text": STANDBY_SLEEPING_PROMPT}],
                 },
             )
-            await self._safe_response_create()
+            await self._safe_response_create(response={"output_modalities": ["audio"]})
         except Exception as e:
             logger.warning("Failed to queue standby sleeping notice: %s", e)
 
@@ -491,7 +505,7 @@ class OpenAIRealtimeHandler(HuggingFaceRealtimeHandler):
                 audio_frame = audio_frame[:, 0]
         audio_frame = np.asarray(audio_frame).reshape(-1)
 
-        audio_frame = audio_to_int16(audio_frame)
+        audio_frame = audio_to_int16(normalize_audio_frame(audio_frame))
         audio_frame = resample_pcm(audio_frame, source_rate, self.SAMPLE_RATE)
 
         try:

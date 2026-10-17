@@ -2,6 +2,7 @@ import docx
 
 
 def dump_doc(path):
+    """Dump paragraphs and tables from a docx file."""
     print("=== DUMP FOR:", path, "===")
     doc = docx.Document(path)
     for p_idx, p in enumerate(doc.paragraphs):

@@ -41,7 +41,8 @@ def audio_to_int16(audio: AudioArray) -> NDArray[np.int16]:
     if audio.dtype == np.int16:
         return audio.astype(np.int16, copy=False)
     if audio.dtype == np.float32:
-        return (audio * 32767.0).astype(np.int16)
+        clamped = audio.clip(-1.0, 1.0)
+        return (clamped * 32767.0).astype(np.int16)
     raise TypeError(f"Unsupported audio data type: {audio.dtype}")
 
 
@@ -52,3 +53,24 @@ def audio_to_float32(audio: AudioArray) -> NDArray[np.float32]:
     if audio.dtype == np.float32:
         return audio.astype(np.float32, copy=False)
     raise TypeError(f"Unsupported audio data type: {audio.dtype}")
+
+
+def normalize_audio_frame(
+    audio: AudioArray,
+    *,
+    target_peak: float = 0.70,
+) -> NDArray[np.float32]:
+    """Normalize and level an audio frame to prevent clipping and speech distortion.
+
+    When the peak amplitude exceeds ``target_peak``, the signal is scaled down smoothly
+    so that loud speech is leveled to a clean listening range without digital clipping.
+    """
+    float_audio = audio_to_float32(audio)
+    if float_audio.size == 0:
+        return float_audio
+
+    peak = float(np.max(np.abs(float_audio)))
+    if peak > target_peak and peak > 0.0:
+        float_audio = float_audio * (target_peak / peak)
+
+    return float_audio.clip(-1.0, 1.0)

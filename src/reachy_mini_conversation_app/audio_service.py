@@ -14,6 +14,8 @@ from typing import Any, Optional
 import numpy as np
 import numpy.typing as npt
 
+from reachy_mini_conversation_app.streaming import normalize_audio_frame
+
 
 logger = logging.getLogger(__name__)
 
@@ -284,6 +286,10 @@ class AudioDeviceService:
             return audio_data, False
 
         return np.zeros_like(audio_data), True
+
+    def normalize_audio(self, audio_data: np.ndarray, target_peak: float = 0.70) -> np.ndarray:
+        """Level and normalize loud audio chunks to prevent clipping and distortion."""
+        return normalize_audio_frame(audio_data, target_peak=target_peak)
 
     def close(self) -> None:
         """Release audio capture resources."""

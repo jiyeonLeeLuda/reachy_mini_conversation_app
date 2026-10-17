@@ -97,6 +97,57 @@ _TOOLS_LOCK = threading.RLock()
 _EXTERNAL_TOOL_MODULE_NAMESPACE = "reachy_mini_conversation_app._external_tools"
 
 
+def _execute_local_time_tool(kwargs: Dict[str, Any]) -> Dict[str, Any]:
+    """Execute time-tool queries locally in <1ms instead of remote HTTP calls."""
+    from datetime import datetime
+    from zoneinfo import ZoneInfo
+
+    tz_name = str(kwargs.get("timezone") or "").strip()
+    try:
+        tz = ZoneInfo(tz_name) if tz_name else datetime.now().astimezone().tzinfo
+    except Exception:
+        tz = datetime.now().astimezone().tzinfo
+
+    now = datetime.now(tz)
+    offset = now.utcoffset()
+    offset_min = int(offset.total_seconds() // 60) if offset is not None else 0
+    data: dict[str, Any] = {
+        "iso": now.isoformat(),
+        "date": now.strftime("%Y-%m-%d"),
+        "time": now.strftime("%H:%M"),
+        "weekday": now.strftime("%A"),
+        "timezone": str(tz),
+        "utc_offset_minutes": offset_min,
+        "summary": now.strftime("%A, %d %B %Y, %H:%M"),
+    }
+
+    compare_tz_name = str(kwargs.get("compare_timezone") or "").strip()
+    if compare_tz_name:
+        try:
+            c_tz = ZoneInfo(compare_tz_name)
+            c_now = datetime.now(c_tz)
+            c_offset = c_now.utcoffset()
+            c_offset_min = int(c_offset.total_seconds() // 60) if c_offset is not None else 0
+            diff_min = offset_min - c_offset_min
+            data["compare"] = {
+                "timezone": compare_tz_name,
+                "time": c_now.strftime("%H:%M"),
+                "date": c_now.strftime("%Y-%m-%d"),
+                "difference_hours": round(diff_min / 60, 1),
+            }
+        except Exception:
+            pass
+
+    text_repr = str(data)
+    return {
+        "status": "ok",
+        "server_alias": "pollen_robotics_reachy_mini_time_tool",
+        "remote_tool_name": "reachy_mini_time_tool_get_time",
+        "content_blocks": [{"type": "text", "text": text_repr}],
+        "text": text_repr,
+    }
+
+
 class RemoteMcpTool(Tool):
     """Adapter exposing one remote MCP tool through the local Tool interface."""
 
@@ -123,6 +174,13 @@ class RemoteMcpTool(Tool):
 
     async def __call__(self, deps: ToolDependencies, **kwargs: Any) -> Dict[str, Any]:
         """Invoke the underlying remote MCP tool."""
+        if self._space_slug == "pollen-robotics/reachy-mini-time-tool":
+            payload = _execute_local_time_tool(kwargs)
+            if payload.get("namespaced_tool_name") == self._client_tool_name:
+                payload["namespaced_tool_name"] = self.name
+            payload.setdefault("tool_space_slug", self._space_slug)
+            return payload
+
         try:
             result = await self._client.call_tool(self._client_tool_name, kwargs)
         except McpToolTimeoutError:

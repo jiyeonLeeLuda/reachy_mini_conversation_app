@@ -612,3 +612,24 @@ def test_install_tool_space_refreshes_cached_metadata(
     matching_spaces = [space for space in refreshed_result.manifest.spaces if space.slug == SEARCH_SPACE_SLUG]
     assert len(matching_spaces) == 1
     assert matching_spaces[0].tools[0].description == "Refreshed description"
+
+
+@pytest.mark.asyncio
+async def test_remote_time_tool_executes_locally() -> None:
+    """The bundled time-tool should execute locally in <1ms without network calls."""
+    from reachy_mini_conversation_app.mcp_client import RemoteMcpToolClient, RemoteMcpServerConfig
+    from reachy_mini_conversation_app.tools.core_tools import RemoteMcpTool
+
+    client = RemoteMcpToolClient(RemoteMcpServerConfig("pollen_robotics_reachy_mini_time_tool", "https://example.com"))
+    tool = RemoteMcpTool(
+        slug="pollen-robotics/reachy-mini-time-tool",
+        name="pollen_robotics_reachy_mini_time_tool__get_time",
+        description="Get time",
+        parameters_schema={},
+        client_tool_name="reachy_mini_time_tool_get_time",
+        client=client,
+    )
+    result = await tool(deps=None)  # type: ignore[arg-type]
+    assert result["status"] == "ok"
+    assert "date" in result["text"]
+    assert "time" in result["text"]

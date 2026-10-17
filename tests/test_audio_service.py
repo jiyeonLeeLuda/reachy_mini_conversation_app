@@ -78,3 +78,16 @@ def test_process_noise_gate() -> None:
     processed_off, is_gated_off = service.process_noise_gate(noise)
     assert is_gated_off is False
     assert np.array_equal(processed_off, noise)
+
+
+def test_normalize_audio() -> None:
+    """Verify normalize_audio scales down loud audio to the target peak."""
+    import numpy as np
+
+    service = AudioDeviceService()
+    loud = np.array([[1.5, -1.5], [0.8, -0.8]], dtype=np.float32)
+    normalized = service.normalize_audio(loud, target_peak=0.70)
+
+    assert np.isclose(np.max(np.abs(normalized)), 0.70)
+    assert np.all(normalized <= 0.7001)
+    assert np.all(normalized >= -0.7001)
