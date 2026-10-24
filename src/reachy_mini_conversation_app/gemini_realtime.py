@@ -366,9 +366,24 @@ class GeminiRealtimeHandler(ConversationHandler):
             await self.tool_manager.shutdown()
 
     async def _receive_loop(self, session: "AsyncSession") -> None:
-        """Consume messages from the Gemini Live session until it closes."""
-        async for message in session.receive():
-            await self._process_message(message)
+        """Consume messages from the Gemini Live session until it closes.
+
+        The SDK's receive() generator ends at every turn boundary (observed:
+        greeting turn ends → generator exhausted), not when the session
+        closes, so a single async-for would tear the whole session down after
+        one turn — the field symptom was "session ended" after every reply or
+        tool call. Keep re-entering receive() until the connection itself
+        fails (raises ConnectionClosed/APIError) or shutdown() cancels us.
+        """
+        while True:
+            yielded = False
+            async for message in session.receive():
+                yielded = True
+                await self._process_message(message)
+            if not yielded:
+                # A turn boundary always carries at least one message; an empty
+                # iteration means the stream is drained (session closing).
+                break
 
     async def _process_message(self, message: types.LiveServerMessage) -> None:
         """Dispatch a single server message to the appropriate handler."""

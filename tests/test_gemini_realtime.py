@@ -65,8 +65,13 @@ class FakeSession:
         """No-op exit."""
 
     async def receive(self) -> Any:
-        """Yield stored messages in order."""
-        for msg in self._messages:
+        """Yield stored messages once; later calls yield nothing (stream drained).
+
+        Mirrors the real SDK: receive() ends at each turn boundary and the
+        handler re-enters it, so a replaying fake would loop forever.
+        """
+        messages, self._messages = self._messages, []
+        for msg in messages:
             yield msg
 
     async def close(self) -> None:
