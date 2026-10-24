@@ -164,11 +164,11 @@
 **Steps:**
 - [x] 보이스 카탈로그 실호출 검증 (2026-10-23): 8개 보이스 전수 OK — Puck/Charon/Kore/Fenrir/Aoede/Leda/Orus/Zephyr 모두 오디오 바이트 수신 확인, 불가 보이스 없음 → 카탈로그 수정 불필요
 - [x] 앱 기동 스모크 (2026-10-23): `CONVERSATION_BACKEND=gemini` + mockup-sim 데몬 환경에서 "Gemini Live session established (voice=Kore, model=gemini-3.8-live)" + "Sent startup greeting prompt" 로그 확인 — waiting_for_config 갇힘 없음. 오디오 장치 경고(--no-media)는 정상.
-- [ ] MuJoCo 시뮬 + `CONVERSATION_BACKEND=gemini`: 대화 왕복, 도구 호출, 끼어들기,
-      장시간(15분+) 세션 재연결 동작 확인 — 결과를 설계 문서 "검증" 절에 추기
-- [ ] README 또는 `.env.example` 주석에 gemini 백엔드 사용법 1줄
-- [ ] 전체 게이트 + (승인 후) PR: base `dev/gemini`, 알려진 제한(재연결 시 컨텍스트
-      초기화, standby 미지원) 명시
+- [x] 실 음성 검증 (2026-10-24, MuJoCo 시뮬 + 실제 마이크·스피커, 공식 시연리스트
+      5개 씬 기준): 결과는 설계 문서 "실증 검증 기록" 절 참조. 씬 1~4 전부 통과,
+      씬 5는 수면 모션·앱 종료까지 정상 (재깨우기는 standby 미지원 제한 그대로)
+- [x] `.env.example`에 gemini 백엔드 사용법 주석 (Task 1에서 완료)
+- [x] 전체 게이트 + PR 제출: orocapangyo#3, base `dev/gemini`, 알려진 제한 명시
 
 #### 범위 외
 
