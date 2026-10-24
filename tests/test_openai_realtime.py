@@ -102,6 +102,22 @@ def test_resample_pcm_same_rate_is_passthrough() -> None:
     assert np.array_equal(result, source)
 
 
+@pytest.mark.parametrize("length", [1, 2])
+def test_resample_pcm_downsamples_frames_shorter_than_filter_kernel(length: int) -> None:
+    """Tail chunks shorter than the anti-alias kernel must not crash downsampling.
+
+    Regression: np.convolve(mode="same") pads such inputs to the kernel length,
+    which desynced fp/xp in np.interp and killed the playback loop mid-turn.
+    """
+    from reachy_mini_conversation_app.openai_realtime import resample_pcm
+
+    source = np.ones(length, dtype=np.int16) * 1000
+    result = resample_pcm(source, 24000, 16000)
+
+    assert result.dtype == np.int16
+    assert result.shape[0] == max(1, round(length * 16000 / 24000))
+
+
 def test_default_openai_voice_validates_config(monkeypatch: Any) -> None:
     """OPENAI_VOICE is normalized against the catalog; unsupported values fall back to marin."""
     from reachy_mini_conversation_app import openai_realtime as oai_mod
