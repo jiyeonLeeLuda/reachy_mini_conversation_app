@@ -11,6 +11,7 @@ import reachy_mini_conversation_app.conversation_handler as conv_mod
 import reachy_mini_conversation_app.huggingface_realtime as hf_mod
 from reachy_mini_conversation_app.config import (
     HF_BACKEND,
+    GEMINI_BACKEND,
     OPENAI_BACKEND,
     DEFAULT_PROFILES_DIRECTORY,
     config,
@@ -35,11 +36,14 @@ if TYPE_CHECKING:
         ("HF", HF_BACKEND),
         ("openai", OPENAI_BACKEND),
         ("OpenAI", OPENAI_BACKEND),
+        ("gemini", GEMINI_BACKEND),
+        ("GEMINI", GEMINI_BACKEND),
+        (" gemini ", GEMINI_BACKEND),
         ("bogus", HF_BACKEND),
     ],
 )
 def test_normalize_conversation_backend(raw: str | None, expected: str) -> None:
-    """CONVERSATION_BACKEND accepts hf/huggingface/openai case-insensitively, defaults to HF."""
+    """CONVERSATION_BACKEND accepts hf/huggingface/openai/gemini case-insensitively, defaults to HF."""
     assert _normalize_conversation_backend(raw) == expected
 
 
