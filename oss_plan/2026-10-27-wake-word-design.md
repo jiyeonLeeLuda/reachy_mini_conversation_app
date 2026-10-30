@@ -1,7 +1,24 @@
 # 로컬 웨이크 워드 감지 — 설계 문서
 
-- **작성일**: 2026-10-27
-- **상태**: 초안 (엔진 선정 스파이크 진행 중 — §엔진 절은 결과 대기)
+- **작성일**: 2026-10-27 (최종 업데이트 2026-10-30)
+- **상태**: 구현·실증 완료. 씬5 확장(잘자→수면→"리치미니"→기상) 실기 동작 확인.
+  아래 "알려진 취약성 & 다음 개선" 참조.
+
+## 알려진 취약성 & 다음 개선 포인트 (학습용)
+
+| # | 항목 | 성격 | 다음주 개선 방향 |
+| :-- | :--- | :--- | :--- |
+| 1 | **시작 시 간헐적 세그폴트** | 환경(네이티브) | onnxruntime+GStreamer+MuJoCo 동시 초기화 레이스. 엔진 지연 로드로 완화했으나 근본 해결 아님. 실로봇/리눅스에선 미발생 추정. → 네이티브 초기화 직렬화, 또는 별도 프로세스 격리 검토 |
+| 2 | **감지 임계값 마진 얇음(0.9997)** | 모델 | base embedding(Google speech)의 한국어 변별 한계. "리치"/"미니" 부분음절이 이론상 근접. → 더 많은 hard-negative 재학습, 사용자 음성 등록(enrollment) 개인화, 2차 확인 발화 |
+| 3 | **기상 후 세션 재연결 루프 없음** | 코드 | `exit_local_standby` 후 재기동 세션은 장시간 타임아웃 시 재연결 안 됨(데모 시간엔 무관). → 재기동 경로에도 백오프 재연결 부여 |
+| 4 | **모델이 스스로 go_to_sleep 호출** | 모델/프롬프트 | 침묵 후 모델이 수면 툴을 부르는 경우 관찰. 프롬프트 가드 강화 또는 수면 조건 명시화 검토 |
+| 5 | **진단 로그 상시 출력** | 코드 | `WakeWordListener diag` INFO 로그는 디버깅용 — 안정화 후 debug 레벨로 내리거나 env 게이트 |
+
+> **학습 포인트**: 이번 디버깅은 "mock/단위 테스트 통과 ≠ 실환경 동작"의 교본.
+> 스테레오 프레임 드롭·asyncio 데드락·네이티브 세그폴트는 모두 **실기에서만** 드러났고,
+> 각 원인을 로그 증거로 좁혀 고쳤다. 상세 여정은 아래 실측 기록(1~11차) 참조.
+
+- **상태(초안 시점)**: 엔진 선정 스파이크 진행 중 — §엔진 절은 결과 대기
 - **배경**: Gemini 백엔드 PR(#3)의 알려진 제한 "수면 후 웨이크 워드 재기동 미지원" 해소.
   Gemini Live에는 OpenAI의 standby 전제 기능(세션 설정 실시간 변경, 전사 전용 모드)이
   없으므로, **백엔드와 무관한 로컬 감지**로 해결한다 (계획서의 "웨이크 워드 감지 =
@@ -319,6 +336,81 @@ tests/test_wake_word.py
 - 결론: v4 + 정식 임계값 0.9997 + 쿨다운이 실사용에서 "리치미니만 깨우기"에
   충분. §10의 "부분음절 한계"는 여전히 이론적으로 존재하나 실사용 영향 경미.
   WW-4 실증 통과 간주
+
+### 글루 배선 완료 (통합 브랜치 feat/wake-standby-integration, 2026-10-27)
+
+Gemini 백엔드 + 웨이크 모듈 병합 후 배선 (게이트 536 passed):
+- `gemini_realtime.py`: `enter_local_standby()`(세션 닫고 재연결 억제) /
+  `exit_local_standby()`(세션 재기동+인사 리셋) / `request_local_standby()`(동기 래퍼),
+  start_up 재연결 루프에 `_local_standby` 가드
+- `console.py`: LocalStream이 웨이크 리스너 소유, record_loop이 gate/mute **이전**
+  raw 프레임을 feed, `_on_wake_detected`(리스너 stop→기상 모션→exit_local_standby)
+- `main.py go_to_sleep_action`: 로컬 standby 경로 최우선 분기 (수면 모션 +
+  request_local_standby + 리스너 start, 앱 미종료)
+- **알려진 한계**: 기상 후 재기동 세션은 `_restart_session` 패턴이라 재연결 루프
+  없음(장시간 후 타임아웃 시 재연결 안 됨). 데모 시간엔 무관, 후속 보완 대상.
+
+### 글루 실증 디버깅 (2026-10-28)
+
+씬5 확장("잘자"→수면→"리치미니"→기상) 실측에서 3개 버그를 순차 발견·수정:
+
+1. **기상 모션 누락**: 수면 시 `movement_manager.stop()`했는데 기상 시 `start()`
+   안 함 → 수면 자세 그대로 말만. 수정: `_on_wake_detected`에서 `mm.start()` 선행.
+2. **웨이크 없이 자동 기상**: console의 `_run_handler_startup_loop`가 standby를
+   모르고 5초 뒤 세션 재접속 → 웨이크 모션 건너뛰고 음성만 복귀. 수정: 그 루프에
+   `_local_standby` 폴링 가드 추가(재접속 금지), 세션 재기동 권한을 console 루프로
+   일원화(`exit_local_standby`는 플래그만 클리어).
+3. **onnxruntime 에러 폭주**: 앱 마이크의 가변 프레임을 엔진에 직접 투입 →
+   `Invalid input shape {2}`. 수정: 리스너 워커가 1280샘플 고정 청크로 버퍼링.
+
+**최종 실측(wwtest4)에서 드러난 진짜 벽 — 환경(데몬) 불안정**:
+- 위 3개 수정 전부 로그로 작동 확인(standby 진입·무재접속·리스너 start·에러 0)
+- 그러나 standby 대기 중 **MuJoCo 데몬이 크래시**(`head_wobbler._fire` →
+  `websockets 1012 service restart` 38회). 로봇 I/O(마이크·스피커·모터) 전체
+  단절 → "리치미니" 감지할 오디오 자체가 소멸 → 무반응. **웨이크 코드 결함 아님.**
+- 이번 세션 내내 데몬 불안정(뷰어 segfault 139 / headless 143 / 1012)이 반복됨 —
+  맥의 MuJoCo+GStreamer 환경 취약성.
+- 방어 개선: standby 진입 시 `robot.disable_wobbling()`(레거시 수면 경로와 동일),
+  기상 시 `enable_wobbling()` → 데몬 死 시 에러 폭주 억제 + 수면 중 머리 흔듦 방지.
+- **미해결**: 안정적 데몬 1회 확보 후 웨이크 감지→기상 전체 체인 재검증 필요.
+
+### 글루 데드락 수정 (2026-10-30)
+
+재테스트(데몬 정상·1012 없음)에서 **수면 직후 이벤트 루프 전체가 멎는** 증상 —
+로그가 "Tool cancelled: go_to_sleep"에서 동결, 마이크·모션 전부 먹통. 원인은
+**순환 대기(deadlock)**:
+- go_to_sleep 툴(툴 스레드) → `request_local_standby().result()`에서 블록
+- `enter_local_standby`(루프) → `await self._receive_task`에서 블록
+- receive 태스크 정리(`_run_live_session` finally) → `tool_manager.shutdown()`이
+  go_to_sleep 툴 완료 대기 → go_to_sleep은 standby를 기다림 → **순환**
+
+OpenAI standby는 세션을 안 닫아(전사 모드 전환) 이 문제가 없었음. Gemini는
+go_to_sleep 안에서 세션을 닫다가 자기 꼬리를 뭄.
+
+수정: ⑴ `request_local_standby`를 **fire-and-forget**(`.result()` 블록 제거) →
+go_to_sleep 툴 즉시 반환. ⑵ `enter_local_standby`가 receive 태스크를 **await 없이
+취소만** → 순환 고리 제거. 게이트 537 통과. **실기 재검증 대기.**
+
+### 스테레오 프레임 드롭 수정 (2026-10-30)
+
+데드락 수정 후: 수면 중 "리치미니" 무반응 + 진단 로그상 **엔진 점수 0개
+(0 chunks processed)**. 원인: 앱 마이크 프레임이 **스테레오 2D**인데, 버퍼링
+워커의 `np.concatenate([buffer(1D), pcm(2D)])`가 매 프레임 예외 → 전량 드롭 →
+엔진에 오디오 0 도달. (이전 "Invalid input shape {2}" 에러의 진짜 정체.)
+수정: 워커가 버퍼 적재 전 `_to_mono_1d()`로 (N,C)/(C,N)→모노 1D 평탄화.
+진단 로그(청크 수·peak score)도 추가. 게이트 537. **실기 재검증 대기.**
+
+### 시작 세그폴트 완화 — 엔진 지연 로드 (2026-10-30)
+
+웨이크 동작 성공 후 관찰: 앱이 시작 직후(첫 오디오 재생 무렵) **간헐적
+세그폴트**(`zsh: segmentation fault`)로 종료 — 3회 재현. 네이티브(C레벨) 크래시로,
+시작 시 여러 네이티브 라이브러리(GStreamer 오디오 + onnxruntime 웨이크 모델 +
+MuJoCo 카메라)가 동시 초기화되며 발생하는 레이스로 추정. 우리 onnxruntime 로드가
+그 초기화 폭풍에 한몫.
+완화: `WakeWordListener`가 엔진 인스턴스 대신 **팩토리**를 받아 **첫 start()(=첫
+수면) 때 지연 로드** → onnxruntime이 앱 시작 초기화에서 빠짐. 로봇이 첫 수면 전엔
+웨이크 불필요하므로 기능 손실 없음. 근본(환경 네이티브 취약성)은 아니나 시작
+경합을 줄여 세그폴트 빈도 감소 기대. 게이트 537. **실기 재검증 대기.**
 
 ### A안 보강 계획 (확정, 2026-10-27)
 
