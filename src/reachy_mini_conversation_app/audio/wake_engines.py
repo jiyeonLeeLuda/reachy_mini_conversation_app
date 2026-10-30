@@ -113,6 +113,7 @@ class OpenWakeWordEngine:
         # Pick the inference framework from the model file extension — the
         # bundled model is ONNX; user-supplied .tflite models keep working.
         framework = "onnx" if model_path.endswith(".onnx") else "tflite"
+        _ensure_feature_models(framework)
         self._model: Any = Model(wakeword_models=[model_path], inference_framework=framework)
         self._model_path = model_path
         self.last_score: float = 0.0  # most recent prediction score (diagnostics)
@@ -153,6 +154,34 @@ class OpenWakeWordEngine:
             del self._model
         except AttributeError:
             pass
+
+
+def _ensure_feature_models(framework: str) -> None:
+    """Download openwakeword's shared feature models if they are missing.
+
+    The openwakeword wheel ships without its melspectrogram/embedding models, so a
+    fresh install cannot run any wake model until they are fetched (~2MB, once).
+    Raises RuntimeError when the download fails so the factory can fall back.
+    """
+    import pathlib  # noqa: PLC0415
+
+    import openwakeword  # noqa: PLC0415
+    from openwakeword.utils import download_file  # noqa: PLC0415
+
+    for feature in openwakeword.FEATURE_MODELS.values():
+        local_path = pathlib.Path(feature["model_path"]).with_suffix(f".{framework}")
+        if local_path.is_file():
+            continue
+        url = str(feature["download_url"]).rsplit(".", 1)[0] + f".{framework}"
+        logger.info("Downloading openwakeword feature model %s", local_path.name)
+        try:
+            local_path.parent.mkdir(parents=True, exist_ok=True)
+            download_file(url, str(local_path.parent))
+        except Exception as exc:
+            raise RuntimeError(
+                f"Failed to download openwakeword feature model {local_path.name!r}: {exc}.  "
+                "Check the network connection or run openwakeword.utils.download_models() manually."
+            ) from exc
 
 
 # ---------------------------------------------------------------------------

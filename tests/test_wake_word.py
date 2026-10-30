@@ -323,6 +323,43 @@ def test_factory_openwakeword_empty_path_falls_back_to_bundled_model(monkeypatch
     result.close()  # type: ignore[union-attr]
 
 
+def _fake_feature_models(tmp_path: Any) -> dict[str, dict[str, str]]:
+    """Feature-model table pointing at tmp_path, shaped like openwakeword.FEATURE_MODELS."""
+    return {
+        name: {
+            "model_path": str(tmp_path / f"{name}.tflite"),
+            "download_url": f"https://example.invalid/{name}.tflite",
+        }
+        for name in ("embedding", "melspectrogram")
+    }
+
+
+def test_ensure_feature_models_downloads_only_missing(monkeypatch: Any, tmp_path: Any) -> None:
+    """Missing feature models are fetched in the requested format; present ones are skipped."""
+    import openwakeword  # noqa: PLC0415
+
+    from reachy_mini_conversation_app.audio import wake_engines  # noqa: PLC0415
+
+    monkeypatch.setattr(openwakeword, "FEATURE_MODELS", _fake_feature_models(tmp_path))
+    (tmp_path / "embedding.onnx").write_bytes(b"present")
+    with patch("openwakeword.utils.download_file") as download:
+        wake_engines._ensure_feature_models("onnx")
+
+    download.assert_called_once_with("https://example.invalid/melspectrogram.onnx", str(tmp_path))
+
+
+def test_ensure_feature_models_wraps_download_failure(monkeypatch: Any, tmp_path: Any) -> None:
+    """A failed download surfaces as RuntimeError so create_wake_engine falls back to None."""
+    import openwakeword  # noqa: PLC0415
+
+    from reachy_mini_conversation_app.audio import wake_engines  # noqa: PLC0415
+
+    monkeypatch.setattr(openwakeword, "FEATURE_MODELS", _fake_feature_models(tmp_path))
+    with patch("openwakeword.utils.download_file", side_effect=OSError("offline")):
+        with pytest.raises(RuntimeError, match="offline"):
+            wake_engines._ensure_feature_models("onnx")
+
+
 def test_factory_openwakeword_bad_explicit_path_returns_none(monkeypatch: Any) -> None:
     """A configured-but-missing model path returns None, without crashing."""
     monkeypatch.setattr(config, "REACHY_MINI_WAKE_MODEL_PATH", "/nonexistent/model.onnx")
