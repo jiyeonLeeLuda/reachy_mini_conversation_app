@@ -52,6 +52,7 @@ from reachy_mini_conversation_app.personality_routes import (
 from reachy_mini_conversation_app.profile_tool_routes import register_profile_tool_methods
 from reachy_mini_conversation_app.audio.startup_config import apply_audio_startup_config
 from reachy_mini_conversation_app.conversation_handler import ConversationHandler
+from reachy_mini_conversation_app.audio.playback_pipeline import pin_playback_mixer_caps
 
 
 try:
@@ -1024,6 +1025,7 @@ class LocalStream:
             self._set_backend_connection_state("not_started")
 
         # Start media after key is set/available
+        pin_playback_mixer_caps(self._robot, logger=logger)
         self._robot.media.start_recording()
         self._robot.media.start_playing()
 
