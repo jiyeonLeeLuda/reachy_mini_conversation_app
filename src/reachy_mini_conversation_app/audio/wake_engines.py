@@ -115,6 +115,7 @@ class OpenWakeWordEngine:
         framework = "onnx" if model_path.endswith(".onnx") else "tflite"
         self._model: Any = Model(wakeword_models=[model_path], inference_framework=framework)
         self._model_path = model_path
+        self.last_score: float = 0.0  # most recent prediction score (diagnostics)
         # Derive the label from the model filename (stem without extension).
         import pathlib  # noqa: PLC0415
 
@@ -128,7 +129,8 @@ class OpenWakeWordEngine:
         # openwakeword's streaming path expects int16 PCM; float32 input in [-1, 1]
         # would be truncated to 0 by the internal int16 cast, producing silent audio.
         prediction = self._model.predict(pcm_16k_mono)
-        score = prediction.get(self._label, 0.0)
+        score = float(prediction.get(self._label, 0.0))
+        self.last_score = score  # exposed for diagnostic logging in the listener
         if score >= _OWW_CONFIDENCE_THRESHOLD:
             logger.info(
                 "OpenWakeWordEngine: detected %r (score=%.3f)",

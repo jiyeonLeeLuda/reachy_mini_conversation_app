@@ -17,7 +17,7 @@ import time
 import queue
 import logging
 import threading
-from typing import TYPE_CHECKING, Protocol, runtime_checkable
+from typing import TYPE_CHECKING, Any, Protocol, runtime_checkable
 from collections.abc import Callable, Sequence
 
 import numpy as np
@@ -122,6 +122,29 @@ WAKE_CONSECUTIVE_CHUNKS: int = 1
 # Target sample rate expected by the engine.
 _ENGINE_SAMPLE_RATE: int = 16_000
 
+# openWakeWord expects fixed 80 ms (1280-sample @ 16 kHz) chunks.  The app's mic
+# pipeline delivers variable-size frames, so the worker buffers to this size
+# before calling the engine — undersized frames otherwise flood onnxruntime with
+# "Invalid input shape" errors and make scores erratic.
+_ENGINE_CHUNK_SAMPLES: int = 1280
+
+
+def _to_mono_1d(pcm: NDArray[np.int16]) -> NDArray[np.int16]:
+    """Collapse any (N, C) / (C, N) stereo frame to a flat mono 1-D array.
+
+    The mic pipeline may deliver 2-D stereo frames; feeding those into the
+    buffer's 1-D concatenate throws every time, silently dropping all audio
+    (observed as "0 chunks processed, no wake detection" during standby).
+    """
+    arr = np.asarray(pcm)
+    if arr.ndim == 1:
+        return arr
+    # Channels-last (N, C) or channels-first (C, N) → average the short axis.
+    if arr.shape[0] <= arr.shape[-1]:
+        arr = arr.T  # make it (N, C)
+    mono: NDArray[Any] = arr.mean(axis=1) if (arr.ndim == 2 and arr.shape[1] > 1) else arr.reshape(-1)
+    return np.round(mono).reshape(-1).astype(np.int16)
+
 
 def _resample_to_16k(pcm: NDArray[np.int16], source_rate: int) -> NDArray[np.int16]:
     """Resample arbitrary-rate mono int16 PCM to 16 kHz using openai_realtime.resample_pcm."""
@@ -154,13 +177,21 @@ class WakeWordListener:
 
     def __init__(
         self,
-        engine: WakeWordEngine,
         on_wake: Callable[[str], None],
+        engine: "WakeWordEngine | None" = None,
+        engine_factory: "Callable[[], WakeWordEngine | None] | None" = None,
         loop: "asyncio.AbstractEventLoop | None" = None,
         consecutive_chunks: int = WAKE_CONSECUTIVE_CHUNKS,
     ) -> None:
-        """Attach engine and callback; call start() to begin listening."""
+        """Attach callback and either an engine or a lazy engine factory.
+
+        Pass ``engine_factory`` to defer engine construction (e.g. loading the
+        onnxruntime model) until the first ``start()`` — this keeps a heavy native
+        library out of app startup, where concurrent GStreamer/MuJoCo init has
+        caused intermittent segfaults.  The model loads on the first sleep instead.
+        """
         self._engine = engine
+        self._engine_factory = engine_factory
         self._on_wake = on_wake
         self._loop = loop
         self._consecutive_chunks = max(1, consecutive_chunks)
@@ -171,16 +202,35 @@ class WakeWordListener:
         self._lock = threading.Lock()
         self._last_wake_time: float = 0.0
         self._consecutive_hits: int = 0
+        self._diag_chunks: int = 0  # diagnostic: total chunks fed to the engine
+        self._diag_peak: float = 0.0  # diagnostic: peak score since last report
 
     # ------------------------------------------------------------------
     # Lifecycle
     # ------------------------------------------------------------------
 
     def start(self) -> None:
-        """Start the listener worker thread.  Idempotent — safe to call twice."""
+        """Start the listener worker thread.  Idempotent — safe to call twice.
+
+        Lazily builds the engine from the factory on first start if one was not
+        supplied up front.  If the engine cannot be created, logs and stays
+        stopped rather than raising.
+        """
         with self._lock:
             if self._running:
                 return
+            if self._engine is None:
+                if self._engine_factory is None:
+                    logger.warning("WakeWordListener.start: no engine and no factory; cannot start.")
+                    return
+                try:
+                    self._engine = self._engine_factory()
+                except Exception as exc:
+                    logger.warning("WakeWordListener.start: engine factory raised: %s", exc)
+                    self._engine = None
+                if self._engine is None:
+                    logger.warning("WakeWordListener.start: engine factory returned None; wake detection off.")
+                    return
             self._running = True
             self._last_wake_time = 0.0
             self._consecutive_hits = 0
@@ -218,7 +268,8 @@ class WakeWordListener:
             except queue.Empty:
                 break
 
-        self._engine.reset()
+        if self._engine is not None:
+            self._engine.reset()
         logger.debug("WakeWordListener stopped")
 
     # ------------------------------------------------------------------
@@ -248,7 +299,11 @@ class WakeWordListener:
     # ------------------------------------------------------------------
 
     def _worker_loop(self) -> None:
-        """Dequeue, resample, and run engine inference.  Runs on the worker thread."""
+        """Dequeue, resample, buffer to fixed chunks, and run engine inference."""
+        buffer = np.empty(0, dtype=np.int16)
+        engine = self._engine  # set by start() before the worker spawns; never None here
+        if engine is None:  # defensive; start() guarantees this
+            return
         while self._running:
             try:
                 sample_rate, pcm = self._queue.get(timeout=0.5)
@@ -263,11 +318,35 @@ class WakeWordListener:
                 break
 
             try:
-                pcm_16k = _resample_to_16k(pcm, sample_rate)
-                result = self._engine.process(pcm_16k)
+                pcm_16k = _resample_to_16k(_to_mono_1d(pcm), sample_rate)
+                buffer = np.concatenate([buffer, pcm_16k])
             except Exception as exc:
-                logger.debug("WakeWordListener: frame processing error (dropped): %s", exc)
+                logger.debug("WakeWordListener: resample error (dropped): %s", exc)
                 continue
+
+            # Feed the engine in fixed 80 ms chunks; keep the remainder buffered.
+            result = None
+            while buffer.shape[0] >= _ENGINE_CHUNK_SAMPLES:
+                chunk = buffer[:_ENGINE_CHUNK_SAMPLES]
+                buffer = buffer[_ENGINE_CHUNK_SAMPLES:]
+                try:
+                    hit = engine.process(chunk)
+                except Exception as exc:
+                    logger.debug("WakeWordListener: engine error (dropped chunk): %s", exc)
+                    continue
+                # Diagnostic: periodically report throughput + peak score so we can
+                # tell "no mic audio" (0 chunks) from "audio but score too low".
+                self._diag_chunks += 1
+                self._diag_peak = max(self._diag_peak, getattr(engine, "last_score", 0.0))
+                if self._diag_chunks % 25 == 0:
+                    logger.info(
+                        "WakeWordListener diag: %d chunks processed, peak score %.4f (threshold path)",
+                        self._diag_chunks,
+                        self._diag_peak,
+                    )
+                    self._diag_peak = 0.0
+                if hit is not None:
+                    result = hit
 
             if result is None:
                 self._consecutive_hits = 0
