@@ -3512,6 +3512,8 @@ dependencies = [
     { name = "python-dotenv" },
     { name = "reachy-mini" },
     { name = "reachy-mini-dances-library" },
+    { name = "scipy", version = "1.17.1", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.12'" },
+    { name = "scipy", version = "1.18.0", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.12'" },
     { name = "ultralytics" },
 ]
 
@@ -3541,6 +3543,7 @@ requires-dist = [
     { name = "python-dotenv" },
     { name = "reachy-mini", specifier = ">=1.10.0rc2" },
     { name = "reachy-mini-dances-library" },
+    { name = "scipy", specifier = ">=1.11" },
     { name = "ultralytics", specifier = ">=8.4.120" },
 ]
 
