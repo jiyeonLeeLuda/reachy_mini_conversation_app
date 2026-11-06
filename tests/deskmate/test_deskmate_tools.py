@@ -1,0 +1,473 @@
+"""M5 (track C): the app-side DeskMate tools wrap the package per design doc §2.2."""
+
+from __future__ import annotations
+import time
+import asyncio
+from typing import Any
+from pathlib import Path
+from datetime import date
+from unittest.mock import MagicMock
+
+import pytest
+
+import deskmate.sync as sync_mod
+import deskmate.insight as insight_mod
+import reachy_mini_conversation_app.tools as tools_pkg
+import reachy_mini_conversation_app.tools.build_insight as build_insight_mod
+import reachy_mini_conversation_app.tools._deskmate_common as common
+from deskmate.store import note_path, read_note, read_bookmark, modify_bookmark
+from deskmate.models import Bookmark, InsightNote
+from deskmate.periods import Period
+from deskmate.session import SESSION_MANAGER
+from deskmate.settings import DeskmateSettings
+from reachy_mini_conversation_app.config import list_tool_module_names
+from reachy_mini_conversation_app.tools.core_tools import Tool, ToolDependencies
+from reachy_mini_conversation_app.tools.get_insight import GetInsight
+from reachy_mini_conversation_app.tools.get_bookmark import GetBookmark, extract_summary
+from reachy_mini_conversation_app.tools.build_insight import BuildInsight
+from reachy_mini_conversation_app.tools.finish_insight import FinishInsight
+from reachy_mini_conversation_app.tools.list_bookmarks import ListBookmarks
+
+
+TODAY = date(2026, 11, 6)
+WEEK = Period(since=date(2026, 10, 31), until=date(2026, 11, 6))
+WEBRTC_ID = "7f3a9c2e-5b1d-4e8a-9c3f-2d7e6a1b4c05"
+ICE_ID = "a1b2c3d4-0001-4000-8000-000000000001"
+RUST_ID = "a1b2c3d4-0002-4000-8000-000000000002"
+TOOL_NAMES = ("build_insight", "finish_insight", "get_bookmark", "get_insight", "list_bookmarks")
+TOOL_CLASSES: tuple[type[Tool], ...] = (BuildInsight, FinishInsight, GetBookmark, GetInsight, ListBookmarks)
+
+
+def _deps() -> ToolDependencies:
+    return ToolDependencies(reachy_mini=MagicMock(), movement_manager=MagicMock())
+
+
+@pytest.fixture(autouse=True)
+def _fixed_today_and_clean_session(monkeypatch: pytest.MonkeyPatch) -> Any:
+    """Pin ``today`` to the fixture week and make sure no session leaks between tests."""
+    monkeypatch.setattr(common, "_today", lambda: TODAY)
+    SESSION_MANAGER.close()
+    yield
+    SESSION_MANAGER.close()
+
+
+@pytest.fixture
+def env(repo: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
+    """Point the tools at the sample repository with ``Default`` as the only allowed profile."""
+    monkeypatch.setenv("DESKMATE_BOOKMARK_REPO", str(repo))
+    monkeypatch.setenv("DESKMATE_CHROME_PROFILES", "Default")
+    monkeypatch.delenv("DESKMATE_DEFAULT_PROFILE", raising=False)
+    monkeypatch.delenv("GEMINI_API_KEY", raising=False)
+    return repo
+
+
+def _bookmark_files(repo: Path) -> list[Path]:
+    return sorted((repo / "bookmarks" / "Default").rglob("*.md"))
+
+
+def _fixture_note(settings: DeskmateSettings, profile: str, period: Period) -> InsightNote:
+    note, _ = read_note(note_path(settings, profile, period))
+    return note
+
+
+# --- configuration -----------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("tool_cls", TOOL_CLASSES[:1] + TOOL_CLASSES[2:])
+async def test_unconfigured_repo_returns_error(monkeypatch: pytest.MonkeyPatch, tool_cls: type[Tool]) -> None:
+    """Without DESKMATE_BOOKMARK_REPO every repository-backed tool fails softly."""
+    monkeypatch.delenv("DESKMATE_BOOKMARK_REPO", raising=False)
+    result = await tool_cls()(_deps(), id="x")
+    assert "DESKMATE_BOOKMARK_REPO" in result["error"]
+    assert "next_action" in result
+
+
+# --- get_insight -----------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_get_insight_ready_returns_fixture_clusters_and_opens_session(env: Path) -> None:
+    """A fresh note for the period is returned as-is, fast, and the session opens."""
+    started = time.perf_counter()
+    result = await GetInsight()(_deps(), days=7)
+    elapsed = time.perf_counter() - started
+
+    assert elapsed < 1.5
+    assert result["status"] == "ready"
+    assert result["today"] == "2026-11-06"
+    assert result["profile"] == "Default"
+    assert result["period"] == {"since": "2026-10-31", "until": "2026-11-06"}
+    assert [cluster["topic"] for cluster in result["clusters"]] == ["WebRTC 재접속", "Rust 비동기"]
+    assert result["unavailable"] == [RUST_ID]
+    assert result["note_path"].endswith("2026-10-31_2026-11-06.md")
+    assert "질문" in result["next_action"] and "제목만 보고" in result["next_action"]
+
+    session = SESSION_MANAGER.current()
+    assert session is not None
+    assert session.profile == "Default"
+    assert session.note_path == Path(result["note_path"])
+
+
+@pytest.mark.asyncio
+async def test_get_insight_default_args_equal_last_seven_days(env: Path) -> None:
+    """Omitting every argument means days=7 ending today."""
+    result = await GetInsight()(_deps())
+    assert result["status"] == "ready"
+    assert result["period"] == WEEK.to_dict()
+
+
+@pytest.mark.asyncio
+async def test_get_insight_empty_period_uses_korean_empty_line(env: Path) -> None:
+    """A period with no bookmarks returns status empty and the §3.2 sentence with that period."""
+    result = await GetInsight()(_deps(), since="2026-09-01", until="2026-09-07")
+
+    assert result["status"] == "empty"
+    assert result["profile"] == "Default"
+    assert result["today"] == "2026-11-06"
+    assert "2026-09-01부터 2026-09-07까지 동안은 새로 저장한 게 없네. 요즘 관심 있는 건 뭐야?" in result["next_action"]
+    assert SESSION_MANAGER.current() is None
+
+
+def test_empty_period_label_defaults_to_last_week() -> None:
+    """Without since/until the empty line says 지난 일주일 (or 지난 N일)."""
+    assert common.resolve_period_args(None, None, None).label() == "지난 일주일"
+    assert common.resolve_period_args(7, None, None).label() == "지난 일주일"
+    assert common.resolve_period_args(30, None, None).label() == "지난 30일"
+
+
+@pytest.mark.asyncio
+async def test_get_insight_stale_note_hands_off_to_build_insight(env: Path) -> None:
+    """Removing a bookmark the note covers makes it stale: generating + exact build_insight call."""
+    _bookmark_files(env)[0].unlink()
+
+    result = await GetInsight()(_deps(), days=7)
+
+    assert result["status"] == "generating"
+    assert result["bookmark_count"] == 2
+    assert result["period"] == WEEK.to_dict()
+    assert "잠깐 훑어볼게" in result["next_action"]
+    assert "build_insight(since='2026-10-31', until='2026-11-06', profile='Default')" in result["next_action"]
+    assert SESSION_MANAGER.current() is None
+
+
+@pytest.mark.asyncio
+async def test_get_insight_missing_note_is_generating(env: Path) -> None:
+    """A period with bookmarks but no note is generating."""
+    result = await GetInsight()(_deps(), since="2026-11-03", until="2026-11-04")
+    assert result["status"] == "generating"
+    assert result["bookmark_count"] == 2
+    assert "build_insight(since='2026-11-03', until='2026-11-04', profile='Default')" in result["next_action"]
+
+
+@pytest.mark.asyncio
+async def test_get_insight_unknown_profile_lists_available(env: Path) -> None:
+    """Profiles outside the allow list are rejected with the usable names."""
+    result = await GetInsight()(_deps(), profile="Profile 1")
+    assert result["error"] == "unknown profile"
+    assert result["available"] == ["Default"]
+    assert "프로필" in result["next_action"]
+
+
+@pytest.mark.asyncio
+async def test_get_insight_days_and_since_together_is_error(env: Path) -> None:
+    """Days and since are exclusive (PeriodError → error dict)."""
+    result = await GetInsight()(_deps(), days=7, since="2026-11-01")
+    assert "error" in result
+    assert "not both" in result["error"]
+
+    result = await GetInsight()(_deps(), since="not-a-date")
+    assert "since" in result["error"]
+
+
+@pytest.mark.asyncio
+async def test_get_insight_profiles_fall_back_to_repo_folders(env: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """With no allow list, the profile folders in the repository are allowed."""
+    monkeypatch.delenv("DESKMATE_CHROME_PROFILES")
+    result = await GetInsight()(_deps(), profile="Nope")
+    assert result["available"] == ["Default"]
+    result = await GetInsight()(_deps())
+    assert result["profile"] == "Default"
+
+
+def test_tool_descriptions_name_the_allowed_profiles(env: Path) -> None:
+    """The description tells the model which profile names exist (so it never invents one)."""
+    for tool_cls in (GetInsight, BuildInsight, ListBookmarks):
+        description = tool_cls().description
+        assert "profile is optional" in description
+        assert "Default" in description
+
+
+# --- build_insight ------------------------------------------------------------------------
+
+
+def _fake_build(settings: DeskmateSettings, llm: Any, profile: str, period: Period, **_: Any) -> InsightNote:
+    return _fixture_note(settings, profile, period)
+
+
+@pytest.mark.asyncio
+async def test_build_insight_ready_after_pipeline(env: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """The pipeline result (here the fixture note) comes back as ready with a session open."""
+    calls: list[tuple[str, Period]] = []
+
+    def _recording_build(settings: DeskmateSettings, llm: Any, profile: str, period: Period, **_: Any) -> InsightNote:
+        calls.append((profile, period))
+        return _fixture_note(settings, profile, period)
+
+    monkeypatch.setattr(insight_mod, "build_insight", _recording_build)
+
+    result = await BuildInsight()(_deps(), since="2026-10-31", until="2026-11-06")
+
+    assert calls == [("Default", WEEK)]
+    assert result["status"] == "ready"
+    assert result["profile"] == "Default"
+    assert result["today"] == "2026-11-06"
+    assert len(result["clusters"]) == 2
+    assert "질문" in result["next_action"] or "question" in result["next_action"]
+    assert "sync skipped" in result["sync_warning"]  # track A not merged: NotImplementedError is tolerated
+    session = SESSION_MANAGER.current()
+    assert session is not None and session.note_path == Path(result["note_path"])
+
+
+@pytest.mark.asyncio
+async def test_build_insight_pipeline_error_is_reported(env: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Any package exception becomes {"error": ...}; the loop never sees a raise."""
+
+    def _boom(*_: Any, **__: Any) -> InsightNote:
+        raise RuntimeError("cluster model exploded")
+
+    monkeypatch.setattr(insight_mod, "build_insight", _boom)
+    result = await BuildInsight()(_deps(), days=7)
+    assert "cluster model exploded" in result["error"]
+    assert SESSION_MANAGER.current() is None
+
+
+@pytest.mark.asyncio
+async def test_build_insight_continues_when_sync_fails(env: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """A sync failure (NotImplementedError or any error) is a warning, not a failure."""
+    monkeypatch.setattr(insight_mod, "build_insight", _fake_build)
+
+    def _not_implemented(*_: Any, **__: Any) -> Any:
+        raise NotImplementedError("track A pending")
+
+    monkeypatch.setattr(sync_mod, "sync_profiles", _not_implemented)
+    result = await BuildInsight()(_deps(), days=7)
+    assert result["status"] == "ready"
+    assert "track A pending" in result["sync_warning"]
+
+    def _crash(*_: Any, **__: Any) -> Any:
+        raise OSError("chrome locked")
+
+    monkeypatch.setattr(sync_mod, "sync_profiles", _crash)
+    result = await BuildInsight()(_deps(), days=7)
+    assert result["status"] == "ready"
+    assert "chrome locked" in result["sync_warning"]
+
+
+@pytest.mark.asyncio
+async def test_build_insight_empty_note_is_empty_status(env: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """A note without a path (nothing written) maps to status empty."""
+
+    def _empty(settings: DeskmateSettings, llm: Any, profile: str, period: Period, **_: Any) -> InsightNote:
+        return InsightNote(profile=profile, since=period.since, until=period.until, generated_at="")
+
+    monkeypatch.setattr(insight_mod, "build_insight", _empty)
+    result = await BuildInsight()(_deps(), since="2026-09-01", until="2026-09-07")
+    assert result["status"] == "empty"
+    assert "2026-09-01부터 2026-09-07까지" in result["next_action"]
+
+
+@pytest.mark.asyncio
+async def test_build_insight_validates_before_running(env: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Unknown profile / bad period never reach the pipeline."""
+    monkeypatch.setattr(insight_mod, "build_insight", _boom_if_called)
+    assert (await BuildInsight()(_deps(), profile="Profile 1"))["error"] == "unknown profile"
+    assert "not both" in (await BuildInsight()(_deps(), days=3, since="2026-11-01"))["error"]
+
+
+def _boom_if_called(*_: Any, **__: Any) -> InsightNote:
+    raise AssertionError("pipeline must not run")
+
+
+@pytest.mark.asyncio
+async def test_build_insight_cancellation_propagates(env: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """task_cancel must be able to stop the build: CancelledError is not swallowed."""
+
+    async def _cancelled(*_: Any, **__: Any) -> Any:
+        raise asyncio.CancelledError
+
+    monkeypatch.setattr(build_insight_mod.asyncio, "to_thread", _cancelled)
+    with pytest.raises(asyncio.CancelledError):
+        await BuildInsight()(_deps(), days=7)
+
+
+# --- get_bookmark ----------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_get_bookmark_by_guid_is_fast_and_returns_summary(env: Path) -> None:
+    """Lookup by guid returns the front matter and the text under ## 요약."""
+    started = time.perf_counter()
+    result = await GetBookmark()(_deps(), id=WEBRTC_ID)
+    elapsed = time.perf_counter() - started
+
+    assert elapsed < 0.5
+    assert result["id"] == WEBRTC_ID
+    assert result["profile"] == "Default"
+    assert result["title"] == "WebRTC 재접속 처리 패턴"
+    assert result["url"] == "https://example.com/webrtc/reconnect"
+    assert result["tags"] == ["개발", "읽을거리"]
+    assert result["date"] == "2026-11-03"
+    assert result["summary_status"] == "ok"
+    assert result["summary"].startswith("WebRTC 연결이 끊겼을 때")
+    assert "## 요약" not in result["summary"]
+    assert result["today"] == "2026-11-06"
+    assert "요약" in result["next_action"]
+
+
+@pytest.mark.asyncio
+async def test_get_bookmark_fetch_failed_rust(env: Path) -> None:
+    """The fetch_failed bookmark reports its status and placeholder summary."""
+    result = await GetBookmark()(_deps(), id=RUST_ID)
+    assert result["summary_status"] == "fetch_failed"
+    assert result["summary"] == "본문을 가져오지 못했다. 제목 기준으로만 다룸."
+    assert result["title"].startswith("Rust: async/await 입문")
+
+
+@pytest.mark.asyncio
+async def test_get_bookmark_unknown_or_missing_id(env: Path) -> None:
+    """Unknown ids and a missing id argument are soft errors."""
+    assert "not found" in (await GetBookmark()(_deps(), id="00000000-0000-0000-0000-000000000000"))["error"]
+    assert "error" in await GetBookmark()(_deps())
+
+
+def test_extract_summary_stops_at_next_heading() -> None:
+    """Only the ## 요약 section is returned; later sections and the heading are dropped."""
+    body = "intro\n## 요약\n첫 줄\n둘째 줄\n\n## 메모\n사용자 메모\n"
+    assert extract_summary(body) == "첫 줄\n둘째 줄"
+    assert extract_summary("no heading here\n") == "no heading here"
+
+
+# --- list_bookmarks ----------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_list_bookmarks_newest_first_with_limit(env: Path) -> None:
+    """Bookmarks come newest first; limit truncates; count follows."""
+    result = await ListBookmarks()(_deps(), days=7)
+    assert result["today"] == "2026-11-06"
+    assert result["profile"] == "Default"
+    assert result["count"] == 3
+    assert [item["id"] for item in result["bookmarks"]] == [RUST_ID, ICE_ID, WEBRTC_ID]
+    assert set(result["bookmarks"][0]) == {"id", "title", "url", "tags", "date", "summary_status"}
+    assert "next_action" in result
+
+    limited = await ListBookmarks()(_deps(), days=7, limit=2)
+    assert limited["count"] == 2
+    assert [item["id"] for item in limited["bookmarks"]] == [RUST_ID, ICE_ID]
+
+
+@pytest.mark.asyncio
+async def test_list_bookmarks_excludes_archived(env: Path) -> None:
+    """Archiving a bookmark through the store hides it from the list."""
+    target = next(path for path in _bookmark_files(env) if "7f3a9c" in path.name)
+
+    def _archive(bookmark: Bookmark) -> Bookmark:
+        bookmark.archived = True
+        return bookmark
+
+    modify_bookmark(target, _archive)
+    assert read_bookmark(target).archived is True
+
+    result = await ListBookmarks()(_deps(), days=7)
+    assert result["count"] == 2
+    assert WEBRTC_ID not in [item["id"] for item in result["bookmarks"]]
+
+
+@pytest.mark.asyncio
+async def test_list_bookmarks_errors(env: Path) -> None:
+    """Profile and period validation match get_insight."""
+    assert (await ListBookmarks()(_deps(), profile="Work"))["error"] == "unknown profile"
+    assert "error" in await ListBookmarks()(_deps(), days=2, since="2026-11-01")
+    assert "limit" in (await ListBookmarks()(_deps(), limit="many"))["error"]
+
+
+# --- finish_insight ------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_finish_insight_without_session_is_error(env: Path) -> None:
+    """Nothing to close → error, nothing written."""
+    result = await FinishInsight()(_deps(), conclusion="끝")
+    assert result["error"] == "no open insight session"
+
+
+@pytest.mark.asyncio
+async def test_finish_insight_appends_conversation_and_closes(env: Path) -> None:
+    """After get_insight, finishing appends ## 대화 기록 with the conclusion and closes the session."""
+    opened = await GetInsight()(_deps(), days=7)
+    assert opened["status"] == "ready"
+    path = Path(opened["note_path"])
+    before, _ = read_note(path)
+    assert len(before.conversations) == 1
+
+    result = await FinishInsight()(
+        _deps(), conclusion="ICE restart 2단계 전략을 먼저 써 보기로 했다.", reason="confirmed"
+    )
+
+    assert result["ok"] is True
+    assert result["note_path"] == str(path)
+    assert result["reason"] == "confirmed"
+    assert "인사" in result["next_action"]
+    assert FinishInsight.needs_response is True
+    assert SESSION_MANAGER.current() is None
+
+    after, _ = read_note(path)
+    assert len(after.conversations) == 2
+    assert after.conversations[-1].startswith("## 대화 기록 (2026-")
+    assert "ICE restart 2단계 전략을 먼저 써 보기로 했다." in after.conversations[-1]
+    assert after.clusters == before.clusters  # front matter untouched
+
+    assert (await FinishInsight()(_deps(), conclusion="again"))["error"] == "no open insight session"
+
+
+@pytest.mark.asyncio
+async def test_finish_insight_rejects_auto_and_bad_reasons(env: Path) -> None:
+    """'auto' belongs to the app-side state machine; other unknown reasons are errors too."""
+    await GetInsight()(_deps(), days=7)
+    assert (await FinishInsight()(_deps(), conclusion="x", reason="auto"))[
+        "error"
+    ] == "reason 'auto' is reserved for the app"
+    assert "reason" in (await FinishInsight()(_deps(), conclusion="x", reason="bored"))["error"]
+    assert "conclusion" in (await FinishInsight()(_deps(), conclusion="  "))["error"]
+    assert SESSION_MANAGER.current() is not None  # invalid calls do not close the session
+
+
+# --- discovery / schema ---------------------------------------------------------------------
+
+
+def test_tool_modules_are_discoverable_and_well_formed() -> None:
+    """Every tool file is auto-discoverable, named after its tool, and has a tags-free schema."""
+    tools_dir = Path(tools_pkg.__file__).parent
+    discovered = list_tool_module_names(tools_dir)
+    for name in TOOL_NAMES:
+        assert name in discovered
+    assert "_deskmate_common" not in discovered
+
+    for tool_cls in TOOL_CLASSES:
+        tool = tool_cls()
+        assert issubclass(tool_cls, Tool)
+        assert tool.name in TOOL_NAMES
+        assert isinstance(tool.description, str) and tool.description
+        schema = tool.parameters_schema
+        assert schema["type"] == "object"
+        assert "tags" not in schema["properties"]
+        spec = tool.spec()
+        assert spec["name"] == tool.name
+
+    assert set(GetInsight().parameters_schema["properties"]) == {"days", "since", "until", "profile"}
+    assert set(BuildInsight().parameters_schema["properties"]) == {"days", "since", "until", "profile"}
+    assert set(ListBookmarks().parameters_schema["properties"]) == {"days", "since", "until", "profile", "limit"}
+    assert set(GetBookmark().parameters_schema["properties"]) == {"id"}
+    assert set(FinishInsight().parameters_schema["properties"]) == {"conclusion", "reason"}
+    assert FinishInsight().parameters_schema["properties"]["reason"]["enum"] == ["explicit", "confirmed"]
