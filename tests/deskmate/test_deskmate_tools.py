@@ -52,9 +52,10 @@ def _fixed_today_and_clean_session(monkeypatch: pytest.MonkeyPatch) -> Any:
 
 
 @pytest.fixture
-def env(repo: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
-    """Point the tools at the sample repository with ``Default`` as the only allowed profile."""
+def env(repo: Path, chrome_user_data: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
+    """Point the tools at the sample repository and fake Chrome data, ``Default`` as the only allowed profile."""
     monkeypatch.setenv("DESKMATE_BOOKMARK_REPO", str(repo))
+    monkeypatch.setenv("DESKMATE_CHROME_USER_DATA_DIR", str(chrome_user_data))
     monkeypatch.setenv("DESKMATE_CHROME_PROFILES", "Default")
     monkeypatch.delenv("DESKMATE_DEFAULT_PROFILE", raising=False)
     monkeypatch.delenv("GEMINI_API_KEY", raising=False)
@@ -224,7 +225,8 @@ async def test_build_insight_ready_after_pipeline(env: Path, monkeypatch: pytest
     assert result["today"] == "2026-11-06"
     assert len(result["clusters"]) == 2
     assert "질문" in result["next_action"] or "question" in result["next_action"]
-    assert "sync skipped" in result["sync_warning"]  # track A not merged: NotImplementedError is tolerated
+    assert "sync_warning" not in result  # real sync against the fixture Chrome data: no warnings
+    assert len(_bookmark_files(env)) > 3  # sync mirrored the fixture Chrome bookmarks into the repo
     session = SESSION_MANAGER.current()
     assert session is not None and session.note_path == Path(result["note_path"])
 
