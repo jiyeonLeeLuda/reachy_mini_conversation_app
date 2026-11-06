@@ -1,8 +1,8 @@
 # 소프트웨어 설계서 (SDD): 리치미니 데스크메이트 — 기능 1 위클리 인사이트
 
-- **문서 버전**: 0.8.1
+- **문서 버전**: 0.8.2
 - **작성일**: 2026-11-06
-- **상태**: 요구사항 확정 · 1~6장 확정 · 검수 반영 · 구현 전 · Chrome 다중 프로필 반영
+- **상태**: 요구사항 확정 · 1~6장 확정 · 검수 반영 · Chrome 다중 프로필 반영 · **구현 M0~M5 완료, M6 에뮬레이터 연동 대기** (2026-11-07)
 - **검수**: 2026-11-06 20년차 풀스택 관점 서브에이전트 검수 반영 (부록 C)
 - **베이스**: upstream `reachy_mini_conversation_app` (OpenAI/Gemini realtime 백엔드, `tools/`의 `Tool` 서브클래스로 기능 확장)
 
@@ -533,6 +533,20 @@ tests/deskmate/
 | M7 백필·부분 인사이트 | B | `backfilling`/`partial` 상태, 쪼개기 배치, 하루 상한·간격 .env | 상한 초과 시 백그라운드 전환, 중단 후 재개, 부분 인사이트 | M4, M5 (데모 범위 밖) |
 | M8 대화 로그 PR | 메인 | transcript observer 로거 + fan-out 래퍼 (별도 PR) | JSONL 생성, 콘솔 observer 공존, `finish_insight`가 원문 접힘 절 추가 | M6 (별도 PR) |
 | M9 깃 미러·MCP 서버 (선택) | — | 북마크별 과거 날짜 커밋 재구성 스크립트, 패키지를 감싸는 MCP 서버 | 프런트매터 `date`로 재구성한 로그가 시간순, 서버가 같은 결과 반환 | M2 (후순위) |
+
+#### 6.3.1 진행 상황 (2026-11-07 새벽, 브랜치 `feat/weekly-insight`)
+
+| 마일스톤 | 상태 | 비고 |
+| :--- | :--- | :--- |
+| M0 | 완료 | `src/deskmate/` 계약 모듈, 픽스처, `.env.example` 7절, `pyproject`(pyyaml·trafilatura) |
+| M1 | 준비됨 | `profiles/deskmate_ko` + `scripts/deskmate_demo_setup.py`(픽스처 저장소 복사). 에뮬레이터 대화 검증은 사용자 세션에서 |
+| M2 | 완료 | `deskmate.sync` (A 트랙, 테스트 43) + `python -m deskmate.sync` CLI |
+| M3·M4 | 완료 | `deskmate.summarize`·`deskmate.insight` (B 트랙, 테스트 25) |
+| M5 | 완료 | 도구 5개 (C 트랙, 테스트 28) + 종단 테스트 `test_deskmate_e2e.py` (A+B+C 합류) |
+| M6 | 일부 | `deskmate.session`(상태 기계)은 있음. **앱 훅 미연결**: activity observer heartbeat, 10분 무응답·슬립·종료 시 자동 마감. 에뮬레이터 시나리오 1~6 미검증 |
+| M7~M9 | 미착수 | |
+
+전체 게이트: ruff·mypy strict·pytest 646개 통과 (macOS). Windows CI는 PR 시 확인.
 
 ### 6.4 병렬 트랙과 합류
 
