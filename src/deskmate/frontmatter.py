@@ -5,6 +5,7 @@ Serialization is hand-rolled so the on-disk order and style stay stable
 """
 
 from __future__ import annotations
+import re
 import json
 from typing import Any
 from datetime import date, datetime
@@ -13,6 +14,7 @@ import yaml
 
 
 FENCE = "---"
+_ISO_DATE = re.compile(r"\d{4}-\d{2}-\d{2}")
 _NEEDS_QUOTE_CHARS = set(":#{}[],&*?|<>=!%@`\"'\\")
 
 
@@ -24,6 +26,8 @@ def _scalar(value: Any) -> str:
     if isinstance(value, (date, datetime)):
         return value.isoformat()
     text = str(value)
+    if _ISO_DATE.fullmatch(text):
+        return text  # YAML parses it as a date; loaders normalize back to the ISO string
     if (
         text == ""
         or text != text.strip()

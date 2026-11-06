@@ -44,6 +44,7 @@ LOCK_FILENAME = "lock"
 
 _PROCESS_LOCKS: dict[str, threading.RLock] = {}
 _PROCESS_LOCKS_GUARD = threading.Lock()
+_LOCK_DEPTH: dict[str, int] = {}  # re-entrancy depth per repo (guarded by that repo's RLock)
 
 
 def nfc(text: str) -> str:
@@ -107,13 +108,26 @@ def _process_lock(repo: Path) -> threading.RLock:
 
 @contextmanager
 def repo_lock(settings: DeskmateSettings, timeout_s: float = LOCK_TIMEOUT_S) -> Iterator[None]:
-    """Serialize writers on one repository (in-process RLock + cross-process lock file)."""
+    """Serialize writers on one repository (in-process RLock + cross-process lock file).
+
+    Re-entrant: a caller that already holds the lock (same thread) can nest
+    ``repo_lock`` freely; only the outermost level touches the lock file, so a
+    batch can wrap sync + summarize + insight in one critical section.
+    """
     repo = settings.require_repo()
+    key = str(repo.resolve())
     lock_path = settings.state_dir / LOCK_FILENAME
     lock_path.parent.mkdir(parents=True, exist_ok=True)
     plock = _process_lock(repo)
     plock.acquire()
     try:
+        if _LOCK_DEPTH.get(key, 0) > 0:
+            _LOCK_DEPTH[key] += 1
+            try:
+                yield
+            finally:
+                _LOCK_DEPTH[key] -= 1
+            return
         deadline = time.monotonic() + timeout_s
         while True:
             try:
@@ -133,9 +147,11 @@ def repo_lock(settings: DeskmateSettings, timeout_s: float = LOCK_TIMEOUT_S) -> 
                 if time.monotonic() > deadline:
                     raise TimeoutError(f"deskmate repository is locked: {lock_path}")
                 time.sleep(0.1)
+        _LOCK_DEPTH[key] = 1
         try:
             yield
         finally:
+            _LOCK_DEPTH[key] = 0
             lock_path.unlink(missing_ok=True)
     finally:
         plock.release()
