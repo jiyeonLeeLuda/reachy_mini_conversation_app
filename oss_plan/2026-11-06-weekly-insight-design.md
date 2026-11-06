@@ -1,6 +1,6 @@
 # 소프트웨어 설계서 (SDD): 리치미니 데스크메이트 — 기능 1 위클리 인사이트
 
-- **문서 버전**: 0.8.0
+- **문서 버전**: 0.8.1
 - **작성일**: 2026-11-06
 - **상태**: 요구사항 확정 · 1~6장 확정 · 검수 반영 · 구현 전 · Chrome 다중 프로필 반영
 - **검수**: 2026-11-06 20년차 풀스택 관점 서브에이전트 검수 반영 (부록 C)
@@ -180,6 +180,21 @@ class FinishInsight(Tool):  # tools/finish_insight.py
 - `status: empty`일 때 `next_action`은 3장의 빈 기간 멘트를 지시한다.
 - `status: generating`일 때 지연 안내 멘트("잠깐 훑어볼게")를 허용한다. 완료 발화는
   `BackgroundToolManager`가 결과를 모델에 전달한 뒤 모델이 한다.
+
+#### 2.2.1 구현 메모 (M0·M5 구현 중 확정, 2026-11-06)
+
+- **도구는 5개다.** 앱의 모든 도구 호출은 `BackgroundToolManager`로 실행되고 코루틴이 끝나야
+  결과가 모델에 전달된다. 따라서 `get_insight`가 스스로 백그라운드 작업을 "걸어 두는" 형태는
+  불가능하고, 뽀모도로의 focus→break 패턴과 같은 2단계가 된다: `get_insight`는 즉시
+  `generating`을 돌려주며 `next_action`으로 "잠깐 훑어볼게" 멘트 후 **`build_insight`를 같은
+  인자로 즉시 호출**하라고 지시하고, `build_insight`(5번째 도구)가 동기화→요약→상관관계→노트
+  파이프라인을 워커 스레드에서 끝까지 기다린다. 완료 결과가 모델에 전달되면 모델이 묶음 하나와
+  질문 하나로 대화를 시작한다. `task_status`/`task_cancel`이 그대로 적용된다.
+- **설정은 `src/deskmate/settings.py`가 단일 출처다** (`DESKMATE_*` 환경변수). 패키지가 앱을
+  모르게 하기 위해 `config.py`는 수정하지 않았고, `.env.example`에 7절을 추가했다.
+- 도구는 `load_settings()`를 호출 시점에 읽는다 (테스트에서 환경변수로 저장소 경로를 바꾸기 위함).
+- 자동 종료(`reason="auto"`)는 2.2대로 LLM 인자가 아니다. `finish_insight`는 `auto`를 받으면
+  오류를 돌려준다.
 
 ### 2.3 설정 (.env)
 
