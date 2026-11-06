@@ -2,23 +2,22 @@
 
 Public entry point:
 
-    summarize_bookmarks(settings, llm, bookmarks, *, now=None) -> SummarizeReport
+    summarize_bookmarks(settings, llm, bookmarks, *, now=None, client=None) -> SummarizeReport
 
-Rules the implementation must keep (see design doc): fetch-stage 2MB cap,
+Rules the implementation keeps (see design doc): fetch-stage 2MB cap,
 binary content types fail fast, redirect limit 5, meta-charset first, bodies
 under ``MIN_BODY_CHARS`` count as ``fetch_failed``, excluded URL patterns are
 never fetched, ``fetch_failed`` retries back off (1 → 3 → 7 days, max 3),
 ``ok`` bookmarks are never re-summarized, every write goes through
 ``deskmate.store.modify_bookmark``.
+
+Submodules: ``fetch`` (HTTP + text extraction, injectable client), ``sections``
+(``## 요약`` section edits), ``usage`` (token usage JSONL), ``runner`` (the run
+itself; ``runner._sleep`` is the monkeypatch point for the call interval).
 """
 
 from __future__ import annotations
-from datetime import datetime
 from dataclasses import field, dataclass
-
-from deskmate.llm import BatchLLM
-from deskmate.models import Bookmark
-from deskmate.settings import DeskmateSettings
 
 
 # --- tuning constants (§2.3: module constants until M7 promotes them to .env) ---
@@ -41,12 +40,18 @@ class SummarizeReport:
     warnings: list[str] = field(default_factory=list)
 
 
-def summarize_bookmarks(
-    settings: DeskmateSettings,
-    llm: BatchLLM,
-    bookmarks: list[Bookmark],
-    *,
-    now: datetime | None = None,
-) -> SummarizeReport:
-    """Fetch and summarize every bookmark that still needs it. Implemented in track B."""
-    raise NotImplementedError("track B: deskmate.summarize is not implemented yet")
+# The runner reads the constants above, so it is imported once they exist.
+from deskmate.summarize.runner import summarize_bookmarks  # noqa: E402
+
+
+__all__ = [
+    "CALL_INTERVAL_S",
+    "DAILY_MAX_SUMMARIES",
+    "FETCH_MAX_BYTES",
+    "FETCH_MAX_REDIRECTS",
+    "FETCH_TIMEOUT_S",
+    "MIN_BODY_CHARS",
+    "RETRY_BACKOFF_DAYS",
+    "SummarizeReport",
+    "summarize_bookmarks",
+]
