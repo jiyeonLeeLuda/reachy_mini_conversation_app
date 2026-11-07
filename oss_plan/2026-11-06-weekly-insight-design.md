@@ -1,8 +1,8 @@
 # 소프트웨어 설계서 (SDD): 리치미니 데스크메이트 — 기능 1 위클리 인사이트
 
-- **문서 버전**: 0.8.5
+- **문서 버전**: 0.9.0
 - **작성일**: 2026-11-06
-- **상태**: 요구사항 확정 · 1~6장 확정 · 검수 반영 · Chrome 다중 프로필 반영 · **구현 M0~M6 완료, 에뮬레이터 시나리오 1~6 통과 (3은 프롬프트 보강 후 2/2, 누계 2/6)** (2026-11-07)
+- **상태**: 요구사항 확정 · 1~6장 확정 · 검수 반영 · Chrome 다중 프로필 반영 · **구현 M0~M8 완료 (M9 진행 중), 에뮬레이터 시나리오 1~6 통과** (2026-11-07)
 - **검수**: 2026-11-06 20년차 풀스택 관점 서브에이전트 검수 반영 (부록 C)
 - **베이스**: upstream `reachy_mini_conversation_app` (OpenAI/Gemini realtime 백엔드, `tools/`의 `Tool` 서브클래스로 기능 확장)
 
@@ -175,8 +175,7 @@ class FinishInsight(Tool):  # tools/finish_insight.py
         """
 ```
 
-- v1 상태값은 `ready`·`generating`·`empty` 세 개다. 백필 상태값 `backfilling`/`partial`은
-  M7에서 추가한다 (2.5 참조).
+- 상태값은 `ready`·`generating`·`empty`에 M7의 `partial`·`backfilling`을 더해 다섯 개다. `partial`(두 도구 공통): 노트가 `complete: false`인 상태로, `summarized_count`·`pending_count`·`daily_cap_reached`가 함께 오고 세션은 ready처럼 열린다. next_action은 본 것으로 대화를 시작하고 'N건은 아직 안 봤어, 이어서 정리해 달라고 하면 계속 볼게'(하루 한도면 '내일 이어서')를 전하라고 지시한다. `backfilling`(get_insight만): 같은 프로필·기간의 build_insight가 이 프로세스에서 도는 중이면 세션 없이 '아직 훑는 중이야'만 전한다. 재호출된 build_insight는 pending인 북마크부터 이어서 요약한다(북마크 단위로 파일에 쓰므로 중단 후 재개가 자동).
 - `status: empty`일 때 `next_action`은 3장의 빈 기간 멘트를 지시한다.
 - `status: generating`일 때 지연 안내 멘트("잠깐 훑어볼게")를 허용한다. 완료 발화는
   `BackgroundToolManager`가 결과를 모델에 전달한 뒤 모델이 한다.
@@ -225,8 +224,8 @@ class FinishInsight(Tool):  # tools/finish_insight.py
   표시 이름이 아니라 프로필 폴더명(`Default`, `Profile 1`) 기준이다.
 - 무료 등급 한도는 모델과 시기에 따라 바뀌므로 문서에 못 박지 않고 설정값으로 둔다. 구현 시
   당시 한도를 확인해 기본값을 맞춘다.
-- 하루 최대 요약 건수·요약 호출 간격은 처음엔 `src/deskmate/summarize/` 상단의 모듈 상수로
-  두고, 백필(M7)에서 .env 설정으로 올린다.
+- 하루 최대 요약 건수·요약 호출 간격은 `src/deskmate/summarize/` 상단의 모듈 상수로 두었다가 M7에서 .env 설정으로 올렸다.
+- 하루 최대 요약 건수·요약 호출 간격은 M7에서 `DESKMATE_DAILY_MAX_SUMMARIES`(기본 100)·`DESKMATE_CALL_INTERVAL_S`(기본 6.0)로 .env에 올렸다 (모듈 상수는 기본값으로만 남음).
 - 처음 세팅할 때는 `python -m deskmate.sync --discover`로 자동 탐색된 User Data 경로, 프로필(폴더명 + 표시 이름), 북마크 파일과 개수를 확인하고 출력된 .env 줄을 복사한다. 탐색이 안 되면 Chrome의 `chrome://version`에 보이는 "프로필 경로"의 상위 폴더를 `DESKMATE_CHROME_USER_DATA_DIR`에 적는다.
 
 ### 2.4 북마크 동기화 요구사항 (기반 A)
@@ -346,19 +345,20 @@ summarized_at: 2026-11-08
   낡은(stale) 노트로 보고 재생성한다 (`generating`).
 - 재생성 시 기존 `## 대화 기록` 절은 보존한다. 같은 기간에 여러 번 대화하면 절 제목의
   시각으로 구분한다.
-- `partial` 노트는 프런트매터 `complete: false`로 표시하고 백필 완료 후 재생성한다 (M7).
+- `partial` 노트는 프런트매터 `complete: false`와 `pending: [guid, …]`(아직 요약하지 않은 북마크)로 표시하고, 본문에 `## 미요약` 절(제목 최대 10개)을 `## 본문 미확보` 앞에 둔다. 백필이 끝나면 `complete: true`로 재생성되고 `pending` 키는 사라진다 (M7). `unavailable`은 본문 수집 실패만 뜻한다.
 
 **토큰 사용량 로그**: 배치 1회당 `usage`를 `<북마크 저장소>/.deskmate/usage.jsonl`에
 기록한다 (설정으로 위치 변경 가능. 4장). 사용량 로그는 프로필별로 나누지 않고 공통이다
 (줄마다 `profile` 필드로 구분).
 
-**과거 기간 백필 (M7, 데모 범위 밖)**
+**과거 기간 백필 (M7 구현 2026-11-07)**
 
 - 요약은 요청된 기간의 북마크만 만든다. 첫 동기화 때 들어온 과거 북마크는 요약하지 않는다.
 - 과거 기간을 요청하면 미요약 건수를 세고, 배치 1회 상한(2.3)을 넘으면 백그라운드 백필
   작업을 건다. 북마크 단위로 요약을 즉시 파일에 쓰므로 중단돼도 `summary_status: pending`이
   남은 것만 이어서 처리한다.
 - 백필 중 다시 요청하면 요약된 것만으로 부분 인사이트를 만든다 (`status: partial`).
+- 구현: build_insight 1회가 배치 상한(기본 20)·하루 상한 안에서 한 묶음을 요약하고 그때까지 요약된 것으로 노트를 만든다. 남은 것이 있으면 `partial`, 사용자가 '이어서 정리해 줘'라고 하면 모델이 build_insight를 다시 불러 이어간다. 하루 한도에 먼저 걸리면 묶음 호출 없이 빈 partial 노트를 쓰고 '내일 이어서'라고 안내한다.
 
 - 입력: 기간 내 북마크의 url, title, tags, date, 그리고 요약 본문. private·archived 제외.
 - 출력: 옵시디언용 마크다운 노트 1개 (기간당 1개). 사람이 읽기 좋은 형식이어야 하고,
@@ -378,7 +378,8 @@ summarized_at: 2026-11-08
 - **구현**: 앱의 `ConversationHandler.set_transcript_observer`에 로거를 붙인다 (핸들러
   수정 아님). 슬롯이 하나라 `console.py`의 기존 observer와 공존하려면 fan-out 래퍼가
   필요하다. **별도 PR(M8)** 로 진행한다.
-- 로그가 없는 동안 `finish_insight`는 결론만 기록한다 (부록 A 17).
+- **구현 (M8, 2026-11-07)**: `deskmate_transcript_log.py`의 `TranscriptLogger`가 `LocalStream.add_transcript_observer` 팬아웃(M6의 activity observer와 같은 방식)으로 최종 전사만 받아 `<대화 로그 폴더>/YYYY-MM-DD_HHMMSS.jsonl`에 쓴다(첫 발화 시각으로 파일명, 지연 생성). 세션 경계: 슬립·앱 종료 훅에서 파일을 닫고, 그다음 발화가 새 파일을 연다(기상 후 인사가 새 세션의 첫 줄). 프로세스 메모리에 최근 2,000줄 링 버퍼를 두고, `finish_insight`가 세션 시작 시각 이후 줄을 `- HH:MM 사용자/리치미니: …`로 렌더해 접힌 '대화 원문' 절(최대 200줄, 넘치면 앞부분 생략 표시)로 결론 아래에 붙인다. 앱 측 자동 종료는 마커만 쓴다. 설정이 없으면 로거는 no-op.
+- 로거가 없거나(설정 없음) 세션 구간에 줄이 없으면 `finish_insight`는 결론만 기록한다 (부록 A 17).
 
 ## 3. 대화 강령 (시스템 프롬프트 원칙)
 
@@ -549,10 +550,12 @@ tests/deskmate/
 | M3·M4 | 완료 | `deskmate.summarize`·`deskmate.insight` (B 트랙, 테스트 25) |
 | M5 | 완료 | 도구 5개 (C 트랙, 테스트 28) + 종단 테스트 `test_deskmate_e2e.py` (A+B+C 합류) |
 | M6 | 완료 | `deskmate.session`에 `close_if_idle`·`auto_finish`(노트에 `_자동 종료: <사유>_` 절 기록) 추가. 앱 훅 `deskmate_hooks.py`: activity observer heartbeat(`LocalStream.add_activity_observer` 팬아웃), 무응답 감시 스레드(2초 폴링, `DESKMATE_INSIGHT_IDLE_TIMEOUT_MIN`), `go_to_sleep_action` 진입·앱 종료 `finally`에서 자동 마감. `finish_insight` 세션 없음 오류에 `next_action` 추가. 코드 완료 + 실기기(시뮬 + 실제 Chrome 북마크) 검증 2026-11-07: 시나리오 1 통과(생성 → 묶음+질문 → explicit 종료 → 노트), 2 통과(빈 기간 멘트), 4 통과(본문 미확보 → 노트 '본문 미확보' 절, 기존 대화 기록 절 보존), 5 통과(무응답 1분·앱 종료·슬립 전환 모두 실측; 슬립 시 봇이 finish_insight를 먼저 불러 결론 기록 → 훅은 닫을 세션 없음이 정상 경로), 6 통과(동기화 로그에 프로필 열거·Profile 1 건너뜀·폴더 미생성, 미허용 프로필 요청 → unknown profile + available). 시나리오 3은 프롬프트 보강 전 1/4, 보강 후 2/2 (누계 2/6). 월간(30일) 노트 생성 17.6초, get_insight 0.35초(동기화 포함) |
-| M7~M9 | 미착수 | |
-| M10 | 계획 작성 | 2026-11-07 사용자 아이디어. 계획 문서 초안, 구현 전 검토 필요 |
+| M7 | 완료 | 2026-11-07 커밋 d0ff88d·dd7d5fe (브랜치 feat/deskmate-backfill 병합 429f75b). partial/backfilling 상태, pending 프런트매터, ## 미요약 절, DESKMATE_DAILY_MAX_SUMMARIES·DESKMATE_CALL_INTERVAL_S, 테스트 +12 |
+| M8 | 완료 | 2026-11-07 커밋 5386a01·42ae2d2. 세션당 JSONL 전사 로그 + 팬아웃, finish_insight 대화 원문 접힘 절, 테스트 +14 |
+| M9 | 진행 중 | 깃 미러·MCP 서버 (브랜치 feat/deskmate-git-mirror-mcp) |
+| M10 | 1차 초안 | 브랜치 feat/deskmate-dashboard (포크 푸시, PR 없음), 라우트 테스트 29, 브라우저 확인 대기 |
 
-전체 게이트: ruff·mypy strict·pytest 685개 통과 (macOS). Windows CI는 PR 시 확인.
+전체 게이트: ruff·mypy strict·pytest 711개 통과 (macOS). Windows CI는 PR 시 확인.
 
 - 2026-11-07 추가 (M2 보완): Chrome 로그인 계정 북마크 파일 `AccountBookmarks`도 읽어 같은 프로필 안에서 `Bookmarks`와 합친다 (로그인 상태의 Chrome은 `Bookmarks` 없이 `AccountBookmarks`만 가질 수 있음. 사용자 PC에서 확인). 파일 하나라도 깨지면 그 프로필은 건너뛴다(부분 읽기로 인한 오보관 방지). 세팅 확인용 `python -m deskmate.sync --discover`(프로필·북마크 파일·개수와 .env 줄 출력) 추가.
 - 2026-11-07 시나리오 1 실제 북마크로 통과 (generating → ready → 묶음+질문 → explicit 종료 → 노트 기록). build_insight 894초 소요 원인은 배치 모델 지연 → 기본값을 gemini-3.5-flash로 변경.
