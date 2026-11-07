@@ -425,3 +425,53 @@ def test_cli_prints_summary(
     assert "Default: created=5 updated=0 archived=0 excluded=1" in out
     assert "Profile 1: skipped" in out
     assert sync_main(["--chrome-dir", str(chrome_user_data)]) == 2
+
+
+# --- AccountBookmarks (signed-in Chrome) ------------------------------------------------
+
+
+def _split_into_account_bookmarks(chrome: Path, profile: str) -> None:
+    """Move the ``other`` root of ``Bookmarks`` into a new ``AccountBookmarks`` file (both files present)."""
+    path = chrome / profile / "Bookmarks"
+    data = json.loads(path.read_text(encoding="utf-8"))
+    account = json.loads(json.dumps(data))
+    for key in ("bookmark_bar", "synced"):
+        account["roots"][key]["children"] = []
+    data["roots"]["other"]["children"] = []
+    path.write_text(json.dumps(data, ensure_ascii=False), encoding="utf-8")
+    (chrome / profile / "AccountBookmarks").write_text(json.dumps(account, ensure_ascii=False), encoding="utf-8")
+
+
+def test_account_bookmarks_file_is_read_and_merged(empty_repo: Path, chrome_user_data: Path) -> None:
+    """``Bookmarks`` + ``AccountBookmarks`` of one profile are merged: same files and tags as a single file."""
+    _split_into_account_bookmarks(chrome_user_data, "Default")
+    settings = _settings(empty_repo, chrome_user_data, "Default")
+    report = sync_profiles(settings, now=NOW)
+    assert report.profiles == ["Default"] and report.warnings == []
+    assert report.created == {"Default": 5} and report.excluded == {"Default": 1}
+    assert _relative_files(settings, "Default") == EXPECTED_DEFAULT_FILES
+    assert _by_guid(settings, "Default")[GUID_WEBRTC].tags == ["개발", "읽을거리"]  # copy lives in the other file
+
+
+def test_only_account_bookmarks_file_is_enough(empty_repo: Path, chrome_user_data: Path) -> None:
+    """A signed-in profile without ``Bookmarks`` (only ``AccountBookmarks``) syncs exactly like before."""
+    (chrome_user_data / "Default" / "Bookmarks").rename(chrome_user_data / "Default" / "AccountBookmarks")
+    settings = _settings(empty_repo, chrome_user_data, "Default")
+    report = sync_profiles(settings, now=NOW)
+    assert report.profiles == ["Default"] and report.warnings == []
+    assert report.created == {"Default": 5} and report.excluded == {"Default": 1}
+    assert _relative_files(settings, "Default") == EXPECTED_DEFAULT_FILES
+
+
+def test_cli_discover_lists_profiles_and_env_lines(
+    chrome_user_data: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """``--discover`` lists every profile with its bookmark files and prints the .env lines, without syncing."""
+    monkeypatch.delenv("DESKMATE_BOOKMARK_REPO", raising=False)
+    assert sync_main(["--discover", "--chrome-dir", str(chrome_user_data)]) == 0
+    out = capsys.readouterr().out
+    assert "Default" in out and "Bookmarks: 7 bookmarks" in out and "Profile 1" in out
+    assert "Profile 2" in out and "no bookmark file" in out
+    assert f"DESKMATE_CHROME_USER_DATA_DIR={chrome_user_data}" in out
+    assert "DESKMATE_CHROME_PROFILES=Default" in out
+    assert not (chrome_user_data / "repo").exists()

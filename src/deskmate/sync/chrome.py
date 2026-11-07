@@ -2,6 +2,11 @@
 
 Chrome's on-disk format is not a public API, so everything that touches it
 is isolated here: if the format changes, only this module has to follow.
+
+A profile can hold two bookmark files with the same JSON layout: ``Bookmarks``
+(local / legacy sync storage) and ``AccountBookmarks`` (account storage used
+when the user is signed in to Chrome, 2024+). A signed-in profile may have
+only the latter, so both are read and merged per profile.
 """
 
 import os
@@ -20,6 +25,8 @@ logger = logging.getLogger(__name__)
 
 LOCAL_STATE_FILENAME = "Local State"
 BOOKMARKS_FILENAME = "Bookmarks"
+ACCOUNT_BOOKMARKS_FILENAME = "AccountBookmarks"
+BOOKMARK_FILENAMES: tuple[str, ...] = (BOOKMARKS_FILENAME, ACCOUNT_BOOKMARKS_FILENAME)
 DEFAULT_PROFILE_FOLDER = "Default"
 ROOT_KEYS: tuple[str, ...] = ("bookmark_bar", "other", "synced")  # 부록 A 5: JSON keys, not display names
 PARSE_ATTEMPTS = 2
@@ -33,11 +40,16 @@ class ChromeReadError(RuntimeError):
 
 @dataclass(frozen=True)
 class ChromeProfile:
-    """One profile folder: name from ``Local State`` plus its ``Bookmarks`` path (``None`` if absent on disk)."""
+    """One profile folder: name from ``Local State`` plus its bookmark files (empty when absent on disk)."""
 
     folder: str
     name: str | None
-    bookmarks_path: Path | None
+    bookmarks_paths: tuple[Path, ...] = ()
+
+    @property
+    def bookmarks_path(self) -> Path | None:
+        """First bookmark file (``Bookmarks`` before ``AccountBookmarks``), or ``None`` when the profile has none."""
+        return self.bookmarks_paths[0] if self.bookmarks_paths else None
 
 
 @dataclass(frozen=True)
@@ -49,8 +61,8 @@ class ChromeUserData:
     last_used: str | None
 
     def on_disk(self) -> list[str]:
-        """Return the folder names that actually hold a ``Bookmarks`` file."""
-        return sorted(folder for folder, profile in self.profiles.items() if profile.bookmarks_path is not None)
+        """Return the folder names that actually hold a bookmark file."""
+        return sorted(folder for folder, profile in self.profiles.items() if profile.bookmarks_paths)
 
 
 @dataclass(frozen=True)
@@ -102,8 +114,13 @@ def load_json(path: Path) -> dict[str, Any]:
     raise ChromeReadError(f"{path}: {last_error}") from last_error
 
 
+def bookmark_files(profile_dir: Path) -> tuple[Path, ...]:
+    """Bookmark JSON files present in one profile folder, in ``BOOKMARK_FILENAMES`` order."""
+    return tuple(profile_dir / name for name in BOOKMARK_FILENAMES if (profile_dir / name).is_file())
+
+
 def discover_user_data(root: Path) -> ChromeUserData:
-    """List profiles from ``Local State`` (folder + display name + last used) merged with folders holding a ``Bookmarks`` file."""
+    """List profiles from ``Local State`` (folder + display name + last used) merged with folders holding a bookmark file."""
     names: dict[str, str | None] = {}
     last_used: str | None = None
     state_path = root / LOCAL_STATE_FILENAME
@@ -124,26 +141,27 @@ def discover_user_data(root: Path) -> ChromeUserData:
                 if isinstance(raw_last_used, str) and raw_last_used:
                     last_used = _nfc(raw_last_used)
     else:
-        logger.warning("No %s in %s; listing folders that hold a Bookmarks file", LOCAL_STATE_FILENAME, root)
+        logger.warning("No %s in %s; listing folders that hold a bookmark file", LOCAL_STATE_FILENAME, root)
 
-    folders_on_disk: dict[str, Path] = {}
+    folders_on_disk: dict[str, tuple[Path, ...]] = {}
     if root.is_dir():
         for child in sorted(root.iterdir()):
-            if child.is_dir() and (child / BOOKMARKS_FILENAME).is_file():
-                folders_on_disk[_nfc(child.name)] = child
+            if child.is_dir():
+                found = bookmark_files(child)
+                if found:
+                    folders_on_disk[_nfc(child.name)] = found
     for folder in folders_on_disk:
         names.setdefault(folder, None)
 
     profiles: dict[str, ChromeProfile] = {}
     for folder, display in names.items():
-        directory = folders_on_disk.get(folder)
-        bookmarks_path = directory / BOOKMARKS_FILENAME if directory is not None else None
-        profiles[folder] = ChromeProfile(folder=folder, name=display, bookmarks_path=bookmarks_path)
+        profiles[folder] = ChromeProfile(folder=folder, name=display, bookmarks_paths=folders_on_disk.get(folder, ()))
     if last_used is None and DEFAULT_PROFILE_FOLDER in folders_on_disk:
         last_used = DEFAULT_PROFILE_FOLDER
 
     listing = ", ".join(
-        f"{folder} ({profile.name or 'no name'}{'' if profile.bookmarks_path else ', no Bookmarks file'})"
+        f"{folder} ({profile.name or 'no name'}"
+        f"{': ' + '+'.join(path.name for path in profile.bookmarks_paths) if profile.bookmarks_paths else ', no bookmark file'})"
         for folder, profile in profiles.items()
     )
     logger.info("Chrome profiles in %s: %s; last used: %s", root, listing or "none", last_used)

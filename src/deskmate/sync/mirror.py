@@ -127,18 +127,20 @@ def sync_profiles(
 
     for folder in allowed:
         profile = chrome.profiles.get(folder)
-        if profile is None or profile.bookmarks_path is None:
-            report.warnings.append(f"profile {folder!r} is allowed but has no Bookmarks file under {root}")
+        if profile is None or not profile.bookmarks_paths:
+            report.warnings.append(f"profile {folder!r} is allowed but has no bookmark file under {root}")
             logger.warning(report.warnings[-1])
             continue
         try:
-            bookmarks_json = load_json(profile.bookmarks_path)
+            # Bookmarks + AccountBookmarks of one profile are merged (same profile, §2.4);
+            # a broken file skips the whole profile so a partial read never archives bookmarks.
+            bookmark_docs = [load_json(path) for path in profile.bookmarks_paths]
         except ChromeReadError as exc:
-            report.warnings.append(f"profile {folder!r}: could not read Bookmarks: {exc}")
+            report.warnings.append(f"profile {folder!r}: could not read bookmark file: {exc}")
             logger.warning(report.warnings[-1])
             continue
         with repo_lock(settings):
-            _sync_profile(settings, profile, bookmarks_json, report, now, since)
+            _sync_profile(settings, profile, bookmark_docs, report, now, since)
         report.profiles.append(folder)
         logger.info(
             "Synced Chrome profile %s (%s): created=%d updated=%d archived=%d excluded=%d",
@@ -155,7 +157,7 @@ def sync_profiles(
 def _sync_profile(
     settings: DeskmateSettings,
     profile: ChromeProfile,
-    bookmarks_json: dict[str, object],
+    bookmark_docs: list[dict[str, object]],
     report: SyncReport,
     now: datetime,
     since: date | None,
@@ -166,7 +168,7 @@ def _sync_profile(
 
     excluded = 0
     groups: dict[str, _UrlGroup] = {}
-    for node in iter_url_nodes(bookmarks_json):
+    for node in (node for doc in bookmark_docs for node in iter_url_nodes(doc)):
         if any(name.casefold() in excluded_names for name in node.folders):
             excluded += 1
             continue

@@ -1,4 +1,4 @@
-"""Manual sync run: ``python -m deskmate.sync [--profile NAME ...] [--repo PATH] [--chrome-dir PATH] [-v]``."""
+"""Manual sync run: ``python -m deskmate.sync [--discover] [--profile NAME ...] [--repo PATH] [--chrome-dir PATH] [-v]``."""
 
 import sys
 import logging
@@ -8,14 +8,59 @@ from dataclasses import replace
 
 from dotenv import find_dotenv, load_dotenv
 
-from deskmate.settings import load_settings
+from deskmate.settings import ENV_BOOKMARK_REPO, ENV_CHROME_PROFILES, ENV_CHROME_USER_DATA_DIR, load_settings
+from deskmate.sync.chrome import ChromeReadError, load_json, iter_url_nodes, discover_user_data, default_user_data_dir
 from deskmate.sync.mirror import sync_profiles
+
+
+def discover(chrome_dir: Path | None) -> int:
+    """Print the Chrome profiles found on this machine and the ``.env`` lines to use them (no sync)."""
+    root = chrome_dir or default_user_data_dir()
+    print(f"Chrome User Data: {root}" + ("" if chrome_dir else " (OS default; override with --chrome-dir)"))
+    if not root.is_dir():
+        print("  not found. Open chrome://version in Chrome and copy the parent of 'Profile Path'.", file=sys.stderr)
+        return 1
+    chrome = discover_user_data(root)
+    if not chrome.profiles:
+        print("  no profiles found. Open chrome://version in Chrome and check 'Profile Path'.", file=sys.stderr)
+        return 1
+    print("Profiles (folder name is what DESKMATE_CHROME_PROFILES expects):")
+    usable: list[str] = []
+    for folder, profile in chrome.profiles.items():
+        label = f"  {folder:<12} name={profile.name or '-'}"
+        if not profile.bookmarks_paths:
+            print(f"{label}  (no bookmark file: never bookmarked, or profile not on this machine)")
+            continue
+        counts: list[str] = []
+        for path in profile.bookmarks_paths:
+            try:
+                count = sum(1 for _ in iter_url_nodes(load_json(path)))
+            except ChromeReadError as exc:
+                counts.append(f"{path.name}: unreadable ({exc})")
+            else:
+                counts.append(f"{path.name}: {count} bookmarks")
+        suffix = "  <- last used" if folder == chrome.last_used else ""
+        print(f"{label}  {', '.join(counts)}{suffix}")
+        usable.append(folder)
+    if not usable:
+        print("No profile holds a bookmark file yet. Press Cmd+D / Ctrl+D in Chrome once, then run again.")
+        return 1
+    chosen = chrome.last_used if chrome.last_used in usable else usable[0]
+    print("\nAdd these lines to .env (profile list: comma separated, only the ones you want read):")
+    if chrome_dir is not None:
+        print(f"{ENV_CHROME_USER_DATA_DIR}={root}")
+    print(f"{ENV_CHROME_PROFILES}={chosen}")
+    print(f"{ENV_BOOKMARK_REPO}=<markdown repository path, e.g. ~/Documents/bookmarks>")
+    return 0
 
 
 def main(argv: list[str] | None = None) -> int:
     """Run one sync with settings from ``.env``/environment and print a per-profile summary."""
     parser = argparse.ArgumentParser(
         prog="python -m deskmate.sync", description="Mirror Chrome bookmarks to markdown."
+    )
+    parser.add_argument(
+        "--discover", action="store_true", help="only list Chrome profiles and bookmark files, print .env lines"
     )
     parser.add_argument(
         "--profile", action="append", help="Chrome profile folder to sync (repeatable; overrides the allow list)"
@@ -38,6 +83,8 @@ def main(argv: list[str] | None = None) -> int:
         settings = replace(settings, bookmark_repo=args.repo)
     if args.chrome_dir is not None:
         settings = replace(settings, chrome_user_data_dir=args.chrome_dir)
+    if args.discover:
+        return discover(settings.chrome_user_data_dir)
     if not settings.configured:
         print("DESKMATE_BOOKMARK_REPO is not set (or pass --repo)", file=sys.stderr)
         return 2
