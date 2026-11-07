@@ -72,6 +72,8 @@ reachy-mini-conversation-app --ui    # 웹 UI: http://127.0.0.1:7860/
 
 4. 대화 → **"종료해 줘"** → 취침 대기 → **"깨어나 리치미니"** → 대화 재개.
    끝낼 때는 콘솔에서 `Ctrl+C`.
+5. (선택) Chrome 북마크 위클리 인사이트(DeskMate)는 웹 UI의 **Settings → DeskMate** 섹션에서
+   버튼만으로 첫 세팅을 끝낼 수 있습니다 → [docs/deskmate-setup.md](docs/deskmate-setup.md).
 
 > [!NOTE]
 > Windows에서는 실행 전 `$env:PYTHONUTF8 = "1"`을 설정하면 한국어 로그 깨짐을 방지할 수 있습니다.

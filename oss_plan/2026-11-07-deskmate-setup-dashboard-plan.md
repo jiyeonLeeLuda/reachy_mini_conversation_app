@@ -161,6 +161,8 @@
 
 ### Task 4: 데모 데이터 버튼 + 문서
 
+> 사용자 문서: [`docs/deskmate-setup.md`](../docs/deskmate-setup.md) (README에는 DeskMate 위클리 인사이트 절이 없어 별도 문서로 두고 README 빠른 시작에서 링크한다).
+
 **Files:**
 - Create: `src/deskmate/demo.py`
 - Modify: `scripts/deskmate_demo_setup.py` (복사 로직을 `deskmate.demo.create_demo_repo` 호출로 바꾸고 출력만 남김), `src/reachy_mini_conversation_app/deskmate_routes.py` (`DeskmateOps.demo_setup` + `deskmate.demo_setup` 등록), `static/js/components/deskmate-panel.js` (데모 버튼·대상 폴더 입력·"이 값을 .env에 적용"), `.env.example` 7절 주석(“설정 UI(7860) Settings → DeskMate 섹션에서 버튼으로도 할 수 있다” 1~2줄), `README.md` DeskMate 절에 "웹 UI로 첫 세팅" 소절(스크린샷 없이 글로; 설정 UI가 LAN에 열려 있다는 한 줄 포함)
