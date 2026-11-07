@@ -1,8 +1,8 @@
 # 소프트웨어 설계서 (SDD): 리치미니 데스크메이트 — 기능 1 위클리 인사이트
 
-- **문서 버전**: 0.9.0
+- **문서 버전**: 0.9.1
 - **작성일**: 2026-11-06
-- **상태**: 요구사항 확정 · 1~6장 확정 · 검수 반영 · Chrome 다중 프로필 반영 · **구현 M0~M8 완료 (M9 진행 중), 에뮬레이터 시나리오 1~6 통과** (2026-11-07)
+- **상태**: 요구사항 확정 · 1~6장 확정 · 검수 반영 · Chrome 다중 프로필 반영 · **구현 M0~M9 완료, M10 1차 초안, 에뮬레이터 시나리오 1~6 통과** (2026-11-07)
 - **검수**: 2026-11-06 20년차 풀스택 관점 서브에이전트 검수 반영 (부록 C)
 - **베이스**: upstream `reachy_mini_conversation_app` (OpenAI/Gemini realtime 백엔드, `tools/`의 `Tool` 서브클래스로 기능 확장)
 
@@ -66,7 +66,7 @@ Chrome Bookmarks(JSON, 허용 목록의 프로필만) --동기화--> 북마크 �
                                         |
           src/deskmate/ (순수 파이썬 패키지) ←── tools/ 의 얇은 Tool 4개가 import 해 호출 (앱과 같은 프로세스)
                                         |
-                              (선택) MCP 서버 스크립트: 같은 패키지를 HTTP로 감쌈. 로봇 앱은 쓰지 않음
+                              (선택) MCP 서버 스크립트: 같은 패키지를 HTTP로 감쌈. 로봇 앱은 쓰지 않음 — M9 구현: python -m deskmate.mcp_server (stdio) / --http
 ```
 
 - **앱 연동은 같은 프로세스의 Tool로 한다.** 검수 결과, 원격 도구는 `tool_spaces.py`의
@@ -231,7 +231,7 @@ class FinishInsight(Tool):  # tools/finish_insight.py
 ### 2.4 북마크 동기화 요구사항 (기반 A)
 
 - Chrome 북마크 파일(JSON)을 읽어 북마크 1개 = 마크다운 1개로 저장소에 쓴다. **v1은 깃
-  커밋을 만들지 않는다** (깃 미러는 M9 선택 사양, 부록 A 4).
+  커밋을 만들지 않는다** (깃 미러는 M9 선택 사양, 부록 A 4). M9 구현 후에는 `DESKMATE_GIT_MIRROR=1`일 때만 동기화가 생성·갱신·보관 파일을 북마크 날짜(`date_added_utc`, 없으면 `date` 정오)로 커밋한다. 기본값은 여전히 꺼짐.
 - **Chrome 프로필 탐색**: macOS `~/Library/Application Support/Google/Chrome/<Profile>/Bookmarks`,
   Windows `%LOCALAPPDATA%\Google\Chrome\User Data\<Profile>\Bookmarks`. `Local State`에서
   프로필 목록(폴더명 + `profile.info_cache`의 표시 이름)을 읽어 로그에 열거한다. **허용
@@ -552,10 +552,10 @@ tests/deskmate/
 | M6 | 완료 | `deskmate.session`에 `close_if_idle`·`auto_finish`(노트에 `_자동 종료: <사유>_` 절 기록) 추가. 앱 훅 `deskmate_hooks.py`: activity observer heartbeat(`LocalStream.add_activity_observer` 팬아웃), 무응답 감시 스레드(2초 폴링, `DESKMATE_INSIGHT_IDLE_TIMEOUT_MIN`), `go_to_sleep_action` 진입·앱 종료 `finally`에서 자동 마감. `finish_insight` 세션 없음 오류에 `next_action` 추가. 코드 완료 + 실기기(시뮬 + 실제 Chrome 북마크) 검증 2026-11-07: 시나리오 1 통과(생성 → 묶음+질문 → explicit 종료 → 노트), 2 통과(빈 기간 멘트), 4 통과(본문 미확보 → 노트 '본문 미확보' 절, 기존 대화 기록 절 보존), 5 통과(무응답 1분·앱 종료·슬립 전환 모두 실측; 슬립 시 봇이 finish_insight를 먼저 불러 결론 기록 → 훅은 닫을 세션 없음이 정상 경로), 6 통과(동기화 로그에 프로필 열거·Profile 1 건너뜀·폴더 미생성, 미허용 프로필 요청 → unknown profile + available). 시나리오 3은 프롬프트 보강 전 1/4, 보강 후 2/2 (누계 2/6). 월간(30일) 노트 생성 17.6초, get_insight 0.35초(동기화 포함) |
 | M7 | 완료 | 2026-11-07 커밋 d0ff88d·dd7d5fe (브랜치 feat/deskmate-backfill 병합 429f75b). partial/backfilling 상태, pending 프런트매터, ## 미요약 절, DESKMATE_DAILY_MAX_SUMMARIES·DESKMATE_CALL_INTERVAL_S, 테스트 +12 |
 | M8 | 완료 | 2026-11-07 커밋 5386a01·42ae2d2. 세션당 JSONL 전사 로그 + 팬아웃, finish_insight 대화 원문 접힘 절, 테스트 +14 |
-| M9 | 진행 중 | 깃 미러·MCP 서버 (브랜치 feat/deskmate-git-mirror-mcp) |
+| M9 | 완료 | 2026-11-07 커밋 4b3dce4·a18ce41. 깃 미러(src/deskmate/sync/git_mirror.py: 북마크별 과거 날짜 커밋 재구성 rebuild_history, 동기화 시 자동 커밋은 DESKMATE_GIT_MIRROR=1일 때만, CLI --git-rebuild/--git-mirror, bookmark:/update:/archive: 메시지, insights/는 미러 대상 아님) + 도구 로직을 src/deskmate/api.py로 추출하고 FastMCP 서버 src/deskmate/mcp_server.py(stdio 기본, --http 시 http://127.0.0.1:8765/mcp)가 같은 5개 도구를 노출. 앱 도구는 얇은 래퍼(효과음·대화 원문 첨부만 앱 측). 테스트 +38 |
 | M10 | 1차 초안 | 브랜치 feat/deskmate-dashboard (포크 푸시, PR 없음), 라우트 테스트 29, 브라우저 확인 대기 |
 
-전체 게이트: ruff·mypy strict·pytest 711개 통과 (macOS). Windows CI는 PR 시 확인.
+전체 게이트: ruff·mypy strict·pytest 749개 통과 (macOS). Windows CI는 PR 시 확인.
 
 - 2026-11-07 추가 (M2 보완): Chrome 로그인 계정 북마크 파일 `AccountBookmarks`도 읽어 같은 프로필 안에서 `Bookmarks`와 합친다 (로그인 상태의 Chrome은 `Bookmarks` 없이 `AccountBookmarks`만 가질 수 있음. 사용자 PC에서 확인). 파일 하나라도 깨지면 그 프로필은 건너뛴다(부분 읽기로 인한 오보관 방지). 세팅 확인용 `python -m deskmate.sync --discover`(프로필·북마크 파일·개수와 .env 줄 출력) 추가.
 - 2026-11-07 시나리오 1 실제 북마크로 통과 (generating → ready → 묶음+질문 → explicit 종료 → 노트 기록). build_insight 894초 소요 원인은 배치 모델 지연 → 기본값을 gemini-3.5-flash로 변경.
@@ -761,8 +761,8 @@ MuJoCo 시뮬 로봇을 띄우고, 테스트용 Chrome 북마크 파일에 북�
 - 벡터 검색(RAG). 북마크 수백 개 이하에선 태그·날짜·키워드로 충분
 - 유튜브 자막·PDF 텍스트 추출 (2단계)
 - 실기기 포팅 (에뮬레이터 검증 후)
-- MCP 서버 (옵시디언·외부 클라이언트용, M9 이후)
-- 깃 미러 (M9)
+- MCP 서버 (옵시디언·외부 클라이언트용) 구현함 (M9에서 구현, 선택 사양·기본 꺼짐)
+- 깃 미러 구현함 (M9에서 구현, 선택 사양·기본 꺼짐)
 - 백필·부분 인사이트 (M7, 데모 범위 밖)
 - `list_bookmarks`의 `tags` 인자
 - 프로필 통합 보기 (여러 프로필을 하나의 인사이트로)
