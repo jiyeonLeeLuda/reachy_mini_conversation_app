@@ -55,10 +55,12 @@ def _fixed_today_and_clean_session(monkeypatch: pytest.MonkeyPatch) -> Any:
     monkeypatch.setattr(common, "_today", lambda: TODAY)
     SESSION_MANAGER.reset()
     common.reset_sync_throttle()
+    common.reset_building()
     common._LAST_SYNC_AT["Default"] = time.monotonic()
     yield
     SESSION_MANAGER.reset()
     common.reset_sync_throttle()
+    common.reset_building()
 
 
 @pytest.fixture
@@ -634,3 +636,198 @@ def test_tool_modules_are_discoverable_and_well_formed() -> None:
     assert set(GetBookmark().parameters_schema["properties"]) == {"id"}
     assert set(FinishInsight().parameters_schema["properties"]) == {"conclusion", "reason"}
     assert FinishInsight().parameters_schema["properties"]["reason"]["enum"] == ["explicit", "confirmed"]
+
+
+# --- M7 backfill: partial / backfilling statuses -----------------------------------------------
+
+PENDING_A = "ba5ea000-0001-4000-8000-00000000000a"
+PENDING_B = "ba5eb000-0002-4000-8000-00000000000b"
+BUILD_CALL = "build_insight(since='2026-10-31', until='2026-11-06', profile='Default')"
+
+
+def _add_pending(repo: Path, title: str, guid: str, day: date) -> Path:
+    """Write a pending bookmark into the sample repo's Default profile."""
+    from deskmate.store import write_bookmark
+
+    target = repo / "bookmarks" / "Default" / str(day.year) / f"{day.isoformat()} {title} {guid[:6]}.md"
+    bookmark = Bookmark(title=title, url=f"https://example.com/{guid[:6]}", guid=guid, profile="Default", date=day)
+    return write_bookmark(bookmark, target)
+
+
+def _write_partial_fixture_note(settings: DeskmateSettings, pending: list[str]) -> Path:
+    """Turn the fixture week note into a partial one that covers the fixture bookmarks plus ``pending``."""
+    from deskmate.store import write_note, bookmarks_in_period
+    from deskmate.insight import render_note_body
+
+    note = _fixture_note(settings, "Default", WEEK)
+    note.complete = False
+    note.pending = list(pending)
+    note.bookmark_ids = [WEBRTC_ID, ICE_ID, RUST_ID] + list(pending)
+    path = note_path(settings, "Default", WEEK)
+    write_note(note, render_note_body(note, bookmarks_in_period(settings, "Default", WEEK)), path)
+    return path
+
+
+def _partial_note(settings: DeskmateSettings, profile: str, period: Period, *, daily_cap: bool) -> InsightNote:
+    note = _fixture_note(settings, profile, period)
+    note.complete = False
+    note.pending = [PENDING_A, PENDING_B]
+    note.bookmark_ids = [WEBRTC_ID, ICE_ID, RUST_ID, PENDING_A, PENDING_B]
+    note.daily_cap_reached = daily_cap
+    return note
+
+
+@pytest.mark.asyncio
+async def test_build_insight_partial_result_has_counts_and_offers_to_continue(
+    env: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A partial note comes back as status partial with the counts, a session and the continue instruction."""
+    monkeypatch.setattr(
+        insight_mod, "build_insight", lambda s, llm, p, period, **_: _partial_note(s, p, period, daily_cap=False)
+    )
+    result = await BuildInsight()(_deps(), since="2026-10-31", until="2026-11-06")
+    assert result["status"] == "partial"
+    assert result["summarized_count"] == 3 and result["pending_count"] == 2 and result["daily_cap_reached"] is False
+    assert len(result["clusters"]) == 2 and result["unavailable"] == [RUST_ID]
+    assert "2건은 아직 안 봤어" in result["next_action"] and "이어서 정리해" in result["next_action"]
+    assert BUILD_CALL in result["next_action"] and "질문" in result["next_action"]
+    assert "내일" not in result["next_action"]
+    session = SESSION_MANAGER.current()
+    assert session is not None and session.note_path == Path(result["note_path"])
+
+    # Daily cap: the notice says tomorrow and does not hand out the build_insight call.
+    monkeypatch.setattr(
+        insight_mod, "build_insight", lambda s, llm, p, period, **_: _partial_note(s, p, period, daily_cap=True)
+    )
+    capped = await BuildInsight()(_deps(), since="2026-10-31", until="2026-11-06")
+    assert capped["status"] == "partial" and capped["daily_cap_reached"] is True
+    assert "오늘 요약 한도" in capped["next_action"] and "내일" in capped["next_action"]
+    assert BUILD_CALL not in capped["next_action"]
+
+
+@pytest.mark.asyncio
+async def test_build_insight_partial_without_clusters_only_apologizes(
+    env: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Nothing summarized yet (daily cap hit before the first bookmark) → one-sentence notice, no clusters."""
+
+    def _bare(settings: DeskmateSettings, llm: Any, profile: str, period: Period, **_: Any) -> InsightNote:
+        note = _partial_note(settings, profile, period, daily_cap=True)
+        note.clusters, note.unavailable = [], []
+        note.bookmark_ids = [PENDING_A, PENDING_B]
+        return note
+
+    monkeypatch.setattr(insight_mod, "build_insight", _bare)
+    result = await BuildInsight()(_deps(), days=7)
+    assert result["status"] == "partial" and result["clusters"] == []
+    assert result["summarized_count"] == 0 and result["pending_count"] == 2
+    assert "아직 못 봤어" in result["next_action"] and "내일" in result["next_action"]
+
+
+@pytest.mark.asyncio
+async def test_get_insight_partial_note_is_not_stale_and_offers_to_continue(env: Path) -> None:
+    """Partial (current bookmark set) → session + counts + continue offer; finished batch → ready."""
+    from deskmate.settings import load_settings
+
+    settings = load_settings()
+    _add_pending(env, "미요약 글 하나", PENDING_A, date(2026, 11, 6))
+    _add_pending(env, "미요약 글 둘", PENDING_B, date(2026, 11, 6))
+    path = _write_partial_fixture_note(settings, [PENDING_A, PENDING_B])
+
+    result = await GetInsight()(_deps(), days=7)
+    assert result["status"] == "partial"
+    assert result["summarized_count"] == 3 and result["pending_count"] == 2 and result["daily_cap_reached"] is False
+    assert [cluster["topic"] for cluster in result["clusters"]] == ["WebRTC 재접속", "Rust 비동기"]
+    assert "2건은 아직 안 봤어" in result["next_action"] and BUILD_CALL in result["next_action"]
+    assert "제목만 보고" in result["next_action"]  # the ready talk rules follow the notice
+    session = SESSION_MANAGER.current()
+    assert session is not None and session.note_path == path
+
+    # A new bookmark in the period makes even a partial note stale → generating.
+    extra = _add_pending(env, "방금 저장", "ba5ec000-0003-4000-8000-00000000000c", date(2026, 11, 5))
+    assert (await GetInsight()(_deps(), days=7))["status"] == "generating"
+    extra.unlink()
+
+    # Everything summarized but the note never finalized (interrupted after the last chunk) → generating.
+    for guid in (PENDING_A, PENDING_B):
+        target = next(p for p in _bookmark_files(env) if guid[:6] in p.name)
+
+        def _ok(bookmark: Bookmark) -> Bookmark:
+            bookmark.summary_status = "ok"
+            bookmark.body = "## 요약\n요약됨\n"
+            return bookmark
+
+        modify_bookmark(target, _ok)
+    SESSION_MANAGER.reset()
+    pending_done = await GetInsight()(_deps(), days=7)
+    assert pending_done["status"] == "generating" and SESSION_MANAGER.current() is None
+
+    # The finalized (complete) note is ready as before.
+    note, _ = read_note(path)
+    note.complete, note.pending = True, []
+    from deskmate.store import write_note
+
+    write_note(note, "# 완료\n", path)
+    assert (await GetInsight()(_deps(), days=7))["status"] == "ready"
+
+
+@pytest.mark.asyncio
+async def test_get_insight_partial_reports_daily_cap_from_counter(env: Path) -> None:
+    """The daily counter at the cap turns the partial offer into "내일 이어서"."""
+    from deskmate.settings import load_settings
+    from deskmate.summarize.runner import save_daily_count
+
+    settings = load_settings()
+    _add_pending(env, "미요약 글", PENDING_A, date(2026, 11, 6))
+    _write_partial_fixture_note(settings, [PENDING_A])
+    save_daily_count(settings, date.today(), settings.daily_max_summaries)
+
+    result = await GetInsight()(_deps(), days=7)
+    assert result["status"] == "partial" and result["daily_cap_reached"] is True
+    assert "오늘 요약 한도" in result["next_action"] and BUILD_CALL not in result["next_action"]
+
+
+@pytest.mark.asyncio
+async def test_get_insight_is_backfilling_while_build_insight_runs(env: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """While build_insight runs for the same profile/period, get_insight answers backfilling without a session."""
+    import threading
+
+    release = threading.Event()
+
+    def _slow_build(settings: DeskmateSettings, llm: Any, profile: str, period: Period, **_: Any) -> InsightNote:
+        release.wait(5.0)
+        return _fixture_note(settings, profile, period)
+
+    monkeypatch.setattr(insight_mod, "build_insight", _slow_build)
+    task = asyncio.create_task(BuildInsight()(_deps(), since="2026-10-31", until="2026-11-06"))
+    for _ in range(200):
+        if common.is_building("Default", WEEK):
+            break
+        await asyncio.sleep(0.01)
+    assert common.is_building("Default", WEEK)
+
+    meanwhile = await GetInsight()(_deps(), days=7)
+    assert meanwhile["status"] == "backfilling"
+    assert meanwhile["period"] == WEEK.to_dict() and meanwhile["profile"] == "Default"
+    assert "아직 훑는 중이야" in meanwhile["next_action"] and "잠깐만" in meanwhile["next_action"]
+    assert SESSION_MANAGER.current() is None
+    # Another period is not affected.
+    assert (await GetInsight()(_deps(), since="2026-11-03", until="2026-11-04"))["status"] == "generating"
+
+    release.set()
+    built = await task
+    assert built["status"] == "ready" and not common.is_building("Default", WEEK)
+    assert (await GetInsight()(_deps(), days=7))["status"] == "ready"
+
+
+@pytest.mark.asyncio
+async def test_building_registry_is_cleared_after_a_failed_build(env: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """A pipeline error must not leave the period marked as building forever."""
+
+    def _boom(*_: Any, **__: Any) -> InsightNote:
+        raise RuntimeError("model exploded")
+
+    monkeypatch.setattr(insight_mod, "build_insight", _boom)
+    assert "error" in await BuildInsight()(_deps(), days=7)
+    assert not common.is_building("Default", WEEK)
+    assert (await GetInsight()(_deps(), days=7))["status"] == "ready"
