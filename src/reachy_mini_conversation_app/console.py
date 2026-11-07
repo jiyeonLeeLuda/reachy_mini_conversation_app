@@ -44,6 +44,7 @@ from reachy_mini_conversation_app.prompts import get_session_voice, get_session_
 from reachy_mini_conversation_app.streaming import AdditionalOutputs, audio_to_int16, audio_to_float32
 from reachy_mini_conversation_app.audio_service import AudioDeviceService
 from reachy_mini_conversation_app.camera_service import CameraService
+from reachy_mini_conversation_app.deskmate_routes import build_deskmate_ops, register_deskmate_methods
 from reachy_mini_conversation_app.startup_settings import read_startup_settings, write_startup_settings
 from reachy_mini_conversation_app.tools.core_tools import initialize_tools
 from reachy_mini_conversation_app.tool_space_routes import register_tool_space_methods
@@ -1029,6 +1030,12 @@ class LocalStream:
             )
         except Exception:
             logger.exception("Failed to register profile tool methods; personality tool settings will be unavailable")
+
+        try:
+            # deskmate.* — first-time DeskMate setup from the settings UI (M10); .env writes reuse _persist_env_values.
+            register_deskmate_methods(rpc, build_deskmate_ops(persist_env=self._persist_env_values))
+        except Exception:
+            logger.exception("Failed to register DeskMate methods; the DeskMate setup panel will be unavailable")
 
         self._settings_initialized = True
 
