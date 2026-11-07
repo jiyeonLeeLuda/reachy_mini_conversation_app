@@ -16,6 +16,7 @@ import deskmate.insight as insight_mod
 import reachy_mini_conversation_app.tools as tools_pkg
 import reachy_mini_conversation_app.tools.build_insight as build_insight_mod
 import reachy_mini_conversation_app.tools._deskmate_common as common
+import reachy_mini_conversation_app.deskmate_transcript_log as transcript_log_mod
 from deskmate.sync import SyncReport
 from deskmate.store import note_path, read_note, read_bookmark, modify_bookmark
 from deskmate.models import Bookmark, InsightNote
@@ -29,6 +30,7 @@ from reachy_mini_conversation_app.tools.get_bookmark import GetBookmark, extract
 from reachy_mini_conversation_app.tools.build_insight import BuildInsight
 from reachy_mini_conversation_app.tools.finish_insight import FinishInsight
 from reachy_mini_conversation_app.tools.list_bookmarks import ListBookmarks
+from reachy_mini_conversation_app.deskmate_transcript_log import TranscriptLogger
 
 
 TODAY = date(2026, 11, 6)
@@ -53,6 +55,7 @@ def _fixed_today_and_clean_session(monkeypatch: pytest.MonkeyPatch) -> Any:
     "ready" expectation stale; tests that want the sync call ``reset_sync_throttle``.
     """
     monkeypatch.setattr(common, "_today", lambda: TODAY)
+    monkeypatch.setattr(transcript_log_mod, "TRANSCRIPT_LOG", None)  # conclusion-only unless a test installs one
     SESSION_MANAGER.reset()
     common.reset_sync_throttle()
     common._LAST_SYNC_AT["Default"] = time.monotonic()
@@ -438,6 +441,7 @@ async def test_finish_insight_appends_conversation_and_closes(env: Path) -> None
     assert len(after.conversations) == 2
     assert after.conversations[-1].startswith("## 대화 기록 (2026-")
     assert "ICE restart 2단계 전략을 먼저 써 보기로 했다." in after.conversations[-1]
+    assert "<details>" not in after.conversations[-1]  # no transcript log installed → conclusion only
     assert after.clusters == before.clusters  # front matter untouched
 
     # Safety net: a premature explicit finish followed by the real one (2026-11-07 live test) must
@@ -447,6 +451,39 @@ async def test_finish_insight_appends_conversation_and_closes(env: Path) -> None
     third, _ = read_note(path)
     assert len(third.conversations) == 3 and "진짜 결론은 이거다." in third.conversations[-1]
     assert (await FinishInsight()(_deps(), conclusion="third time"))["error"] == "no open insight session"
+
+
+@pytest.mark.asyncio
+async def test_finish_insight_attaches_collapsed_transcript(
+    env: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """M8: with a transcript log installed the section carries the session's lines in a <details> block."""
+    log = TranscriptLogger(tmp_path / "conv")
+    monkeypatch.setattr(transcript_log_mod, "TRANSCRIPT_LOG", log)
+    log.on_transcript("user", "이전 대화", final=True)  # before the session → not attached
+    time.sleep(0.002)
+
+    opened = await GetInsight()(_deps(), days=7)
+    path = Path(opened["note_path"])
+    log.on_transcript("user", "이번 주 뭐 있어?", final=True)
+    log.on_transcript("assistant", "WebRTC 묶음이 있어요. 궁금한 게 뭐예요?", final=False)  # delta: dropped
+    log.on_transcript("assistant", "WebRTC 묶음이 있어요. 궁금한 게 뭐예요?", final=True)
+
+    result = await FinishInsight()(_deps(), conclusion="결론.")
+    assert result["ok"] is True
+    note, _ = read_note(path)
+    section = note.conversations[-1]
+    assert section.startswith("## 대화 기록 (") and "결론." in section
+    assert "<details><summary>대화 원문</summary>" in section and section.rstrip().endswith("</details>")
+    assert "사용자: 이번 주 뭐 있어?" in section and "리치미니: WebRTC 묶음이 있어요. 궁금한 게 뭐예요?" in section
+    assert section.count("리치미니:") == 1 and "이전 대화" not in section
+
+    # Safety net path (session already closed, finish again): the last session's lines are attached too.
+    log.on_transcript("user", "아 맞다, 진짜 결론.", final=True)
+    again = await FinishInsight()(_deps(), conclusion="진짜 결론.")
+    assert again["reopened_last"] is True
+    last = read_note(path)[0].conversations[-1]
+    assert "진짜 결론." in last and "아 맞다, 진짜 결론." in last and "이전 대화" not in last
 
 
 @pytest.mark.asyncio

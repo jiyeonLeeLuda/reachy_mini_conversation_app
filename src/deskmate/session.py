@@ -47,6 +47,7 @@ class InsightSession:
     profile: str
     note_path: Path
     started_at: float = field(default_factory=time.monotonic)
+    started_wall: float = field(default_factory=time.time)  # wall clock, to pick transcript lines (M8)
     last_activity: float = field(default_factory=time.monotonic)
     asked_to_finish: bool = False  # "마칠까요?" asked once already
 

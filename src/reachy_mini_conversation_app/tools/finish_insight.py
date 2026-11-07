@@ -10,6 +10,7 @@ from deskmate.store import append_conversation_section
 from deskmate.session import SESSION_MANAGER
 from reachy_mini_conversation_app.tools.core_tools import Tool, ToolDependencies
 from reachy_mini_conversation_app.tools._deskmate_common import elapsed_ms, now_local_label
+from reachy_mini_conversation_app.deskmate_transcript_log import get_transcript_log, render_transcript_lines
 
 
 logger = logging.getLogger(__name__)
@@ -81,7 +82,8 @@ class FinishInsight(Tool):
             if last is None or not Path(last.note_path).is_file():
                 return {"error": "no open insight session", "next_action": NO_SESSION_NEXT_ACTION}
             session, reopened_last = last, True
-        append_conversation_section(session.note_path, now_local_label(), conclusion)
+        transcript = self._transcript_since(session.started_wall)
+        append_conversation_section(session.note_path, now_local_label(), conclusion, transcript=transcript)
         logger.info(
             "finish_insight: recorded conclusion (%s%s) in %s",
             reason,
@@ -97,3 +99,16 @@ class FinishInsight(Tool):
         if reopened_last:
             result["reopened_last"] = True
         return result
+
+    @staticmethod
+    def _transcript_since(started_wall: float) -> str | None:
+        """Collapsible 대화 원문 for the note (M8), or ``None`` when no log / no lines (conclusion only)."""
+        transcript_log = get_transcript_log()
+        if transcript_log is None:
+            return None
+        try:
+            rendered = render_transcript_lines(transcript_log.lines_since(started_wall))
+        except Exception:
+            logger.debug("finish_insight: transcript unavailable (ignored)", exc_info=True)
+            return None
+        return rendered or None
