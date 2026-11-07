@@ -7,6 +7,7 @@
 import sys
 import logging
 import argparse
+from typing import cast
 from pathlib import Path
 from dataclasses import replace
 
@@ -24,39 +25,85 @@ from deskmate.sync.mirror import sync_profiles
 from deskmate.sync.git_mirror import GitMirrorError, rebuild_history
 
 
+def discover_profiles(root: Path) -> dict[str, object]:
+    """Collect the Chrome profiles under ``root`` with the bookmark count of each file (no sync, no printing).
+
+    Returns ``{root, last_used, profiles, usable}`` where every profile is
+    ``{folder, name, is_last_used, usable, bookmark_files: [{name, count, error}]}``
+    and ``usable`` lists the folders holding at least one bookmark file. Raises
+    ``FileNotFoundError`` when ``root`` is not a directory; zero profiles is not
+    an error (``profiles == []``).
+    """
+    if not root.is_dir():
+        raise FileNotFoundError(f"Chrome user data directory not found: {root}")
+    chrome = discover_user_data(root)
+    profiles: list[dict[str, object]] = []
+    usable: list[str] = []
+    for folder, profile in chrome.profiles.items():
+        files: list[dict[str, object]] = []
+        for path in profile.bookmarks_paths:
+            try:
+                count: int | None = sum(1 for _ in iter_url_nodes(load_json(path)))
+                error: str | None = None
+            except ChromeReadError as exc:
+                count, error = None, str(exc)
+            files.append({"name": path.name, "count": count, "error": error})
+        is_usable = bool(profile.bookmarks_paths)
+        if is_usable:
+            usable.append(folder)
+        profiles.append(
+            {
+                "folder": folder,
+                "name": profile.name,
+                "is_last_used": folder == chrome.last_used,
+                "usable": is_usable,
+                "bookmark_files": files,
+            }
+        )
+    return {"root": str(root), "last_used": chrome.last_used, "profiles": profiles, "usable": usable}
+
+
+def suggested_profile(info: dict[str, object]) -> str | None:
+    """Return the profile folder to propose for ``DESKMATE_CHROME_PROFILES`` (last used if usable, else the first usable)."""
+    usable = cast(list[str], info["usable"])
+    if not usable:
+        return None
+    last_used = info["last_used"]
+    return last_used if isinstance(last_used, str) and last_used in usable else usable[0]
+
+
 def discover(chrome_dir: Path | None) -> int:
     """Print the Chrome profiles found on this machine and the ``.env`` lines to use them (no sync)."""
     root = chrome_dir or default_user_data_dir()
     print(f"Chrome User Data: {root}" + ("" if chrome_dir else " (OS default; override with --chrome-dir)"))
-    if not root.is_dir():
+    try:
+        info = discover_profiles(root)
+    except FileNotFoundError:
         print("  not found. Open chrome://version in Chrome and copy the parent of 'Profile Path'.", file=sys.stderr)
         return 1
-    chrome = discover_user_data(root)
-    if not chrome.profiles:
+    profiles = cast(list[dict[str, object]], info["profiles"])
+    if not profiles:
         print("  no profiles found. Open chrome://version in Chrome and check 'Profile Path'.", file=sys.stderr)
         return 1
     print("Profiles (folder name is what DESKMATE_CHROME_PROFILES expects):")
-    usable: list[str] = []
-    for folder, profile in chrome.profiles.items():
-        label = f"  {folder:<12} name={profile.name or '-'}"
-        if not profile.bookmarks_paths:
+    for profile in profiles:
+        label = f"  {str(profile['folder']):<12} name={profile['name'] or '-'}"
+        files = cast(list[dict[str, object]], profile["bookmark_files"])
+        if not files:
             print(f"{label}  (no bookmark file: never bookmarked, or profile not on this machine)")
             continue
-        counts: list[str] = []
-        for path in profile.bookmarks_paths:
-            try:
-                count = sum(1 for _ in iter_url_nodes(load_json(path)))
-            except ChromeReadError as exc:
-                counts.append(f"{path.name}: unreadable ({exc})")
-            else:
-                counts.append(f"{path.name}: {count} bookmarks")
-        suffix = "  <- last used" if folder == chrome.last_used else ""
+        counts = [
+            f"{entry['name']}: unreadable ({entry['error']})"
+            if entry["error"] is not None
+            else f"{entry['name']}: {entry['count']} bookmarks"
+            for entry in files
+        ]
+        suffix = "  <- last used" if profile["is_last_used"] else ""
         print(f"{label}  {', '.join(counts)}{suffix}")
-        usable.append(folder)
-    if not usable:
+    chosen = suggested_profile(info)
+    if chosen is None:
         print("No profile holds a bookmark file yet. Press Cmd+D / Ctrl+D in Chrome once, then run again.")
         return 1
-    chosen = chrome.last_used if chrome.last_used in usable else usable[0]
     print("\nAdd these lines to .env (profile list: comma separated, only the ones you want read):")
     if chrome_dir is not None:
         print(f"{ENV_CHROME_USER_DATA_DIR}={root}")
