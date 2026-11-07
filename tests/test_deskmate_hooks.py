@@ -1,4 +1,4 @@
-"""M6: DeskMate app hooks — activity heartbeat fan-out and auto-close on idle / sleep / shutdown."""
+"""M6/M8: DeskMate app hooks — activity/transcript fan-out, auto-close and conversation log on sleep / shutdown."""
 
 import time
 import shutil
@@ -10,6 +10,7 @@ from unittest.mock import MagicMock
 
 import pytest
 
+import reachy_mini_conversation_app.deskmate_transcript_log as transcript_log_mod
 from deskmate.session import InsightSessionManager
 from reachy_mini_conversation_app.console import LocalStream
 from reachy_mini_conversation_app.deskmate_hooks import (
@@ -17,6 +18,7 @@ from reachy_mini_conversation_app.deskmate_hooks import (
     idle_timeout_label,
     install_deskmate_hooks,
 )
+from reachy_mini_conversation_app.deskmate_transcript_log import TranscriptLogger
 
 
 FIXTURE_NOTE = Path(__file__).parent / "deskmate" / "fixtures" / "repo_sample" / "insights"
@@ -102,13 +104,78 @@ def test_local_stream_fans_activity_out_to_extra_observers() -> None:
     assert seen == ["say", "SAY"]
 
 
+def test_local_stream_fans_transcripts_out_to_extra_observers() -> None:
+    """The RPC push and every registered transcript observer get (role, text, final); one raising is ignored."""
+    stream = _stream()
+    stream._rpc = MagicMock()
+    seen: list[tuple[str, str, bool]] = []
+
+    def bad(_role: str, _text: str, _final: bool) -> None:
+        raise RuntimeError("boom")
+
+    stream.add_transcript_observer(bad)
+    stream.add_transcript_observer(lambda role, text, final: seen.append((role, text, final)))
+    stream._dispatch_transcript("user", "안녕", False)
+    stream._dispatch_transcript("assistant", "네", True)
+    assert seen == [("user", "안녕", False), ("assistant", "네", True)]
+    assert stream._rpc.broadcast_threadsafe.call_count == 2
+    # The fan-out survives a handler rebuild: the new handler's slot points back at the dispatcher.
+    stream._install_handler(MagicMock())
+    stream.handler.set_transcript_observer.assert_called_once_with(stream._dispatch_transcript)
+
+
 def test_install_registers_observer_without_thread_when_disabled(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Installing wires the observer into the stream; a 0 timeout starts no watchdog."""
+    """Installing wires both observers into the stream; a 0 timeout starts no watchdog; no repo → log disabled."""
     monkeypatch.setenv("DESKMATE_INSIGHT_IDLE_TIMEOUT_MIN", "0")
+    monkeypatch.delenv("DESKMATE_BOOKMARK_REPO", raising=False)
+    monkeypatch.setattr(transcript_log_mod, "TRANSCRIPT_LOG", None)
     stream = _stream()
     hooks = install_deskmate_hooks(stream, logging.getLogger("test"))
     assert hooks.idle_timeout_s == 0 and hooks._thread is None
     assert hooks.on_activity in stream._extra_activity_observers
+    assert hooks.transcript_log is not None and not hooks.transcript_log.enabled
+    assert hooks.transcript_log.on_transcript in stream._extra_transcript_observers
+    assert transcript_log_mod.get_transcript_log() is hooks.transcript_log
+
+
+def test_install_enables_log_in_configured_repo(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    """With a repo configured the logger writes under the resolved conversation log dir via the stream fan-out."""
+    monkeypatch.setenv("DESKMATE_INSIGHT_IDLE_TIMEOUT_MIN", "0")
+    monkeypatch.setenv("DESKMATE_BOOKMARK_REPO", str(tmp_path))
+    monkeypatch.delenv("DESKMATE_CONVERSATION_LOG_DIR", raising=False)
+    monkeypatch.setattr(transcript_log_mod, "TRANSCRIPT_LOG", None)
+    stream = _stream()
+    hooks = install_deskmate_hooks(stream, logging.getLogger("test"))
+    assert (
+        hooks.transcript_log is not None and hooks.transcript_log.log_dir == tmp_path / ".deskmate" / "conversations"
+    )
+    stream._dispatch_transcript("user", "안녕", True)
+    files = list((tmp_path / ".deskmate" / "conversations").glob("*.jsonl"))
+    assert len(files) == 1 and '"text": "안녕"' in files[0].read_text(encoding="utf-8")
+
+
+def test_sleep_and_shutdown_close_the_log_file(note: Path, tmp_path: Path) -> None:
+    """on_sleep / on_shutdown close the transcript file so the next line after wake starts a new one."""
+    log = TranscriptLogger(tmp_path / "conv")
+    hooks = DeskmateSessionHooks(InsightSessionManager(), idle_timeout_min=10, transcript_log=log)
+    log.on_transcript("user", "하나", final=True)
+    first = log.current_file
+    hooks.on_sleep()
+    assert first is not None and log.current_file is None
+    log.on_transcript("assistant", "둘", final=True)
+    second = log.current_file
+    hooks.on_shutdown()
+    assert second is not None and second != first and log.current_file is None
+    assert len(list((tmp_path / "conv").glob("*.jsonl"))) == 2
+
+
+def test_hooks_without_transcript_log_still_close_sessions(note: Path) -> None:
+    """The transcript log is optional for the hooks (older wiring, tests)."""
+    manager = InsightSessionManager()
+    hooks = DeskmateSessionHooks(manager, idle_timeout_min=10)
+    manager.open("Default", note)
+    hooks.on_sleep()
+    assert manager.current() is None and hooks.transcript_log is None
 
 
 @pytest.mark.parametrize(("seconds", "label"), [(600, "10분"), (60, "1분"), (90, "90초"), (1, "1초")])

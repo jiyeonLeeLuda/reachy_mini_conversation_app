@@ -155,6 +155,9 @@ class LocalStream:
         # App-side activity observers (DeskMate heartbeat etc.). Kept here, not on the
         # handler, so they survive handler rebuilds.
         self._extra_activity_observers: list[Callable[[str], None]] = []
+        # Same for transcript observers (DeskMate conversation log): the handler has a
+        # single slot, so LocalStream fans (role, text, final) out from it.
+        self._extra_transcript_observers: list[Callable[[str, str, bool], None]] = []
         self._install_handler(handler)
 
     def _install_handler(self, handler: ConversationHandler) -> None:
@@ -172,13 +175,22 @@ class LocalStream:
         if callable(transcript_setter):
             transcript_setter(self._dispatch_transcript)
 
+    def add_transcript_observer(self, observer: Callable[[str, str, bool], None]) -> None:
+        """Register an app-side transcript observer, called (role, text, final) after the RPC push."""
+        self._extra_transcript_observers.append(observer)
+
     def _dispatch_transcript(self, role: str, text: str, final: bool) -> None:
-        """Push a conversation.transcript notification to JSON-RPC clients."""
+        """Fan one transcript chunk out to JSON-RPC clients and app-side observers."""
         if self._rpc is not None:
             self._rpc.broadcast_threadsafe(
                 "conversation.transcript",
                 {"role": role, "text": text, "final": final},
             )
+        for observer in list(self._extra_transcript_observers):
+            try:
+                observer(role, text, final)
+            except Exception:
+                logger.debug("transcript observer raised (ignored)", exc_info=True)
 
     # ------------------------------------------------------------------
     # Wake-word listener helpers

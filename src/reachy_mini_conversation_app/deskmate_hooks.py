@@ -5,6 +5,10 @@ Everything else is the app's job and lives here, next to the other lifecycle
 glue: every conversation activity is a heartbeat, and the session is closed
 with the ``자동 종료`` marker when the user stays silent, when Reachy goes to
 sleep, or when the app shuts down. No LLM call is involved in any of these.
+
+The same hooks own the conversation transcript log (§2.6, M8): the logger is
+fanned out from the stream's transcript observer and its session file is closed
+on sleep and on shutdown (``deskmate_transcript_log`` documents the boundary rule).
 """
 
 from __future__ import annotations
@@ -14,6 +18,7 @@ from typing import Any, Protocol
 
 from deskmate.session import TRIGGER_IDLE, TRIGGER_SLEEP, SESSION_MANAGER, TRIGGER_SHUTDOWN, InsightSessionManager
 from deskmate.settings import load_settings
+from reachy_mini_conversation_app.deskmate_transcript_log import TranscriptLogger, set_transcript_log
 
 
 logger = logging.getLogger(__name__)
@@ -33,6 +38,8 @@ def idle_timeout_label(timeout_s: float) -> str:
 class _ActivitySource(Protocol):
     def add_activity_observer(self, observer: Any) -> None: ...
 
+    def add_transcript_observer(self, observer: Any) -> None: ...
+
 
 class DeskmateSessionHooks:
     """Heartbeat + auto-close glue between the conversation app and the insight session."""
@@ -43,9 +50,11 @@ class DeskmateSessionHooks:
         *,
         idle_timeout_min: float,
         poll_interval_s: float = IDLE_POLL_INTERVAL_S,
+        transcript_log: TranscriptLogger | None = None,
     ) -> None:
-        """Hold the manager and the idle timeout (minutes, from ``DESKMATE_INSIGHT_IDLE_TIMEOUT_MIN``)."""
+        """Hold the manager, the idle timeout (minutes, ``DESKMATE_INSIGHT_IDLE_TIMEOUT_MIN``) and the transcript log."""
         self._manager = manager
+        self.transcript_log = transcript_log
         self._idle_timeout_s = max(idle_timeout_min, 0.0) * 60.0
         self._poll_interval_s = poll_interval_s
         self._stop = threading.Event()
@@ -62,13 +71,19 @@ class DeskmateSessionHooks:
         self._manager.heartbeat()
 
     def on_sleep(self) -> None:
-        """Sleep hook: close the session before the robot goes to sleep (any sleep path)."""
+        """Sleep hook: close the session before the robot goes to sleep (any sleep path), then the log file."""
         self._manager.auto_finish(TRIGGER_SLEEP)
+        self._end_transcript_session()
 
     def on_shutdown(self) -> None:
-        """Shutdown hook: stop the watchdog and close the session."""
+        """Shutdown hook: stop the watchdog, close the session, then the log file."""
         self.stop()
         self._manager.auto_finish(TRIGGER_SHUTDOWN)
+        self._end_transcript_session()
+
+    def _end_transcript_session(self) -> None:
+        if self.transcript_log is not None:
+            self.transcript_log.end_session()
 
     def check_idle(self) -> bool:
         """Close the session when idle for the timeout; return whether it was closed (used by the watchdog)."""
@@ -104,13 +119,25 @@ class DeskmateSessionHooks:
 
 
 def install_deskmate_hooks(stream_manager: _ActivitySource, logger_: logging.Logger) -> DeskmateSessionHooks:
-    """Create the hooks, attach the activity observer to the stream and start the watchdog."""
+    """Create the hooks, attach the activity + transcript observers to the stream and start the watchdog.
+
+    The transcript logger is a no-op when DeskMate is not configured; it is exposed
+    process-wide (``deskmate_transcript_log.get_transcript_log``) for ``finish_insight``.
+    """
+    transcript_log = TranscriptLogger(None)
     try:
-        timeout_min: float = load_settings().insight_idle_timeout_min
+        settings = load_settings()
+        timeout_min: float = settings.insight_idle_timeout_min
+        transcript_log = TranscriptLogger.from_settings(settings)
     except Exception as exc:  # settings must never break app startup
-        logger_.warning("DeskMate settings unreadable (%s); idle auto-close disabled.", exc)
+        logger_.warning("DeskMate settings unreadable (%s); idle auto-close and conversation log disabled.", exc)
         timeout_min = 0.0
-    hooks = DeskmateSessionHooks(idle_timeout_min=timeout_min)
+    hooks = DeskmateSessionHooks(idle_timeout_min=timeout_min, transcript_log=transcript_log)
     stream_manager.add_activity_observer(hooks.on_activity)
+    stream_manager.add_transcript_observer(transcript_log.on_transcript)
+    transcript_log.start_session()
+    set_transcript_log(transcript_log)
+    if transcript_log.enabled:
+        logger_.info("DeskMate conversation log: %s", transcript_log.log_dir)
     hooks.start()
     return hooks
