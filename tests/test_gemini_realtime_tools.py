@@ -358,3 +358,136 @@ async def test_idle_tool_call_does_not_send_to_model() -> None:
     assert len(fake_session.tool_responses) == 0, "send_tool_response must not be called for idle tool calls"
     # The call_id must be removed from in-flight even though we didn't send
     assert "idle_1" not in handler._in_flight_tool_calls
+
+
+# ---------------------------------------------------------------------------
+# 6. Per-message response groups: a long-running tool must not block later turns
+# ---------------------------------------------------------------------------
+
+
+def _tool_call_msg(*calls: FakeFunctionCall) -> Any:
+    """Build a fake LiveServerMessage carrying only a tool_call with the given calls."""
+
+    class FakeMsg:
+        data = None
+        server_content = None
+        tool_call = FakeToolCallMessage(function_calls=list(calls))
+
+    return FakeMsg()
+
+
+@pytest.mark.asyncio
+async def test_long_running_tool_does_not_block_later_single_call_group() -> None:
+    """A later turn's tool response is sent immediately while an earlier tool is still running.
+
+    Regression: pomodoro_timer/build_insight (15–25 min) held the process-wide in-flight
+    set, so every later tool call (e.g. task_status) completed but its response was
+    never sent and the model went silent.
+    """
+    handler = _make_handler()
+    fake_session = FakeSession()
+    handler.connection = fake_session  # type: ignore[assignment]
+
+    fake_manager = FakeToolManager()
+    fake_manager.start_up(tool_callbacks=[handler._handle_tool_result])
+    handler.tool_manager = fake_manager  # type: ignore[assignment]
+
+    # Turn 1: a long-running tool is started and never completes during this test.
+    await handler._process_message(_tool_call_msg(FakeFunctionCall("pomodoro_timer", {"minutes": 25}, "call_long")))
+    # Turn 2 (a new server message): a quick status query.
+    await handler._process_message(_tool_call_msg(FakeFunctionCall("task_status", {}, "call_status")))
+
+    assert handler._in_flight_tool_calls == {"call_long", "call_status"}
+
+    await fake_manager.deliver(_make_notification("call_status", "task_status", result={"running": True}))
+
+    assert len(fake_session.tool_responses) == 1, "later group's response must be sent without waiting for call_long"
+    sent = fake_session.tool_responses[0]
+    assert [r.id for r in sent] == ["call_status"]
+    assert sent[0].name == "task_status"
+    assert sent[0].response == {"running": True}
+
+    # The long-running call is still in flight and still tracked.
+    assert handler._in_flight_tool_calls == {"call_long"}
+    assert "call_long" in handler._tool_call_groups
+    assert "call_status" not in handler._tool_call_groups
+
+    # When the long tool finally finishes, it is sent on its own — not re-sending call_status.
+    await fake_manager.deliver(_make_notification("call_long", "pomodoro_timer", result={"done": True}))
+    assert len(fake_session.tool_responses) == 2
+    assert [r.id for r in fake_session.tool_responses[1]] == ["call_long"]
+    assert handler._in_flight_tool_calls == set()
+    assert handler._tool_call_groups == {}
+
+
+@pytest.mark.asyncio
+async def test_two_calls_in_one_message_are_sent_together_despite_other_group() -> None:
+    """A real parallel batch still waits for both of its calls, independent of other groups."""
+    handler = _make_handler()
+    fake_session = FakeSession()
+    handler.connection = fake_session  # type: ignore[assignment]
+
+    fake_manager = FakeToolManager()
+    fake_manager.start_up(tool_callbacks=[handler._handle_tool_result])
+    handler.tool_manager = fake_manager  # type: ignore[assignment]
+
+    # An unrelated long-running call from an earlier message is in flight the whole time.
+    await handler._process_message(_tool_call_msg(FakeFunctionCall("build_insight", {}, "call_long")))
+    # One message with two parallel calls.
+    await handler._process_message(
+        _tool_call_msg(
+            FakeFunctionCall("get_current_time", {}, "call_a"),
+            FakeFunctionCall("move_head", {"x": 0}, "call_b"),
+        )
+    )
+
+    # Both ids of the batch share one group object; the long call has its own.
+    assert handler._tool_call_groups["call_a"] is handler._tool_call_groups["call_b"]
+    assert handler._tool_call_groups["call_long"] is not handler._tool_call_groups["call_a"]
+    assert handler._tool_call_groups["call_a"].pending == {"call_a", "call_b"}
+
+    await fake_manager.deliver(_make_notification("call_a", "get_current_time", result={"time": "12:00"}))
+    assert fake_session.tool_responses == [], "must wait for the second call of the same message"
+
+    await fake_manager.deliver(_make_notification("call_b", "move_head", result={"ok": True}))
+    assert len(fake_session.tool_responses) == 1
+    assert {r.id for r in fake_session.tool_responses[0]} == {"call_a", "call_b"}
+
+    # The unrelated long-running call is untouched.
+    assert handler._in_flight_tool_calls == {"call_long"}
+    assert set(handler._tool_call_groups) == {"call_long"}
+
+
+@pytest.mark.asyncio
+async def test_session_start_clears_tool_call_group_state() -> None:
+    """Stale group/in-flight state from a previous session is cleared when a new session starts."""
+    handler = _make_handler()
+    fake_manager = FakeToolManager()
+    handler.tool_manager = fake_manager  # type: ignore[assignment]
+
+    # Leftover state as if a long-running tool was in flight when the old session died.
+    await handler._process_message(_tool_call_msg(FakeFunctionCall("pomodoro_timer", {}, "call_stale")))
+    assert handler._in_flight_tool_calls == {"call_stale"}
+    assert "call_stale" in handler._tool_call_groups
+    assert "call_stale" in handler._call_id_to_name
+
+    class _ConnectFailed(RuntimeError):
+        pass
+
+    class _FakeLive:
+        def connect(self, *, model: str, config: Any) -> Any:  # noqa: ARG002
+            raise _ConnectFailed("no network in tests")
+
+    class _FakeAio:
+        live = _FakeLive()
+
+    class _FakeClient:
+        aio = _FakeAio()
+
+    # _run_live_session clears batch state before connecting; connect then fails fast.
+    with pytest.raises(_ConnectFailed):
+        await handler._run_live_session(_FakeClient())  # type: ignore[arg-type]
+
+    assert handler._in_flight_tool_calls == set()
+    assert handler._tool_call_groups == {}
+    assert handler._call_id_to_name == {}

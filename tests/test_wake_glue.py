@@ -93,7 +93,7 @@ def _make_handler() -> Any:
     handler._startup_greeting_sent = True
     handler._client = _FakeClient()  # type: ignore[assignment]
     handler._in_flight_tool_calls = set()
-    handler._pending_tool_responses = []
+    handler._tool_call_groups = {}
     handler._call_id_to_name = {}
     return handler
 

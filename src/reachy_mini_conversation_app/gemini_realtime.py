@@ -7,6 +7,7 @@ import random
 import asyncio
 import logging
 from typing import TYPE_CHECKING, Any, Optional
+from dataclasses import field, dataclass
 
 import numpy as np
 from google import genai
@@ -59,6 +60,19 @@ GEMINI_AVAILABLE_VOICES: list[str] = [
     "Orus",
     "Zephyr",
 ]
+
+
+@dataclass
+class _ToolCallGroup:
+    """Function calls that arrived in one LiveServerToolCall message.
+
+    Gemini requires the FunctionResponses of one message to be sent together, but
+    groups from *different* messages are independent: a long-running tool from an
+    earlier turn must not hold back the responses of a later turn's calls.
+    """
+
+    pending: set[str] = field(default_factory=set)
+    responses: list[types.FunctionResponse] = field(default_factory=list)
 
 
 def _is_websocket_close(exc: BaseException) -> bool:
@@ -221,10 +235,13 @@ class GeminiRealtimeHandler(ConversationHandler):
         self._output_transcript_buffer: str = ""
 
         # Task 3: parallel tool-call batching state.
-        # call_ids of all function_calls in the current batch that have not yet returned.
+        # call_ids of every function_call (across all groups) that has not yet returned.
         self._in_flight_tool_calls: set[str] = set()
-        # Accumulated FunctionResponse objects waiting for the batch to complete.
-        self._pending_tool_responses: list[types.FunctionResponse] = []
+        # Maps call_id → the group (one per LiveServerToolCall message) it belongs to.
+        # Each group is flushed independently once all of *its* calls have returned,
+        # so a long-running tool (pomodoro_timer, build_insight) never blocks the
+        # responses of calls issued in later turns.
+        self._tool_call_groups: dict[str, _ToolCallGroup] = {}
         # Maps call_id → tool name (FunctionResponse requires name in addition to id).
         self._call_id_to_name: dict[str, str] = {}
 
@@ -358,7 +375,7 @@ class GeminiRealtimeHandler(ConversationHandler):
 
         # Clear stale batch state from a previous session before starting.
         self._in_flight_tool_calls.clear()
-        self._pending_tool_responses.clear()
+        self._tool_call_groups.clear()
         self._call_id_to_name.clear()
 
         self.tool_manager.start_up(tool_callbacks=[self._handle_tool_result])
@@ -463,11 +480,20 @@ class GeminiRealtimeHandler(ConversationHandler):
                     self._mark_activity("assistant_transcript_done")
 
         if message.tool_call:
-            for fc in message.tool_call.function_calls or []:
+            function_calls = list(message.tool_call.function_calls or [])
+            # All calls of one server message form one response group. Register every
+            # id before starting any tool so a fast tool cannot flush the group early.
+            group = _ToolCallGroup()
+            call_ids: list[str] = []
+            for fc in function_calls:
                 # Use the SDK-provided id (filled as "call_<number>"); synthesize if absent.
                 call_id: str = (fc.id or "").strip() or f"synthetic_{uuid.uuid4().hex[:8]}"
+                call_ids.append(call_id)
+                group.pending.add(call_id)
+                self._tool_call_groups[call_id] = group
                 self._in_flight_tool_calls.add(call_id)
                 self._call_id_to_name[call_id] = fc.name or ""
+            for call_id, fc in zip(call_ids, function_calls):
                 await self.tool_manager.start_tool(
                     call_id=call_id,
                     tool_call_routine=ToolCallRoutine(
@@ -505,12 +531,14 @@ class GeminiRealtimeHandler(ConversationHandler):
             logger.warning("Failed to send startup greeting prompt: %s", e)
 
     async def _handle_tool_result(self, completed_tool: ToolNotification) -> None:
-        """Handle a completed tool, batching results until the full parallel group is ready.
+        """Handle a completed tool, batching results until its parallel group is ready.
 
         Parallel tool calls arrive in one LiveServerToolCall message and Gemini requires
-        all FunctionResponses to be sent together — partial sends leave the model silent.
-        This method accumulates results and flushes the batch only when every call_id in
-        the current in-flight set has been resolved.
+        all FunctionResponses of that message to be sent together — partial sends leave
+        the model silent. Results are accumulated per group (one per server message) and
+        a group is flushed as soon as every call_id *in that group* has resolved. Groups
+        from other messages — e.g. a 25-minute pomodoro_timer started a few turns ago —
+        do not delay the flush.
         """
         call_id = completed_tool.id
         tool_name = self._call_id_to_name.get(call_id, completed_tool.tool_name)
@@ -530,22 +558,28 @@ class GeminiRealtimeHandler(ConversationHandler):
             completed_tool.error,
         )
 
-        # Idle tool calls do not get sent to the model; UI output only.
-        if completed_tool.is_idle_tool_call:
-            self._in_flight_tool_calls.discard(call_id)
-            return
-
-        # Accumulate response; mark this call_id as resolved.
-        self._pending_tool_responses.append(types.FunctionResponse(id=call_id, name=tool_name, response=result_dict))
+        # Resolve the group this call belongs to. An unknown id (e.g. registered by
+        # a test or a path that bypassed _process_message) is its own single-call group.
+        group = self._tool_call_groups.pop(call_id, None)
+        if group is None:
+            group = _ToolCallGroup(pending={call_id})
+        group.pending.discard(call_id)
         self._in_flight_tool_calls.discard(call_id)
 
-        # Flush the batch only once every call in this group has completed.
-        if self._in_flight_tool_calls:
+        # Idle tool calls do not get sent to the model; UI output only.
+        if completed_tool.is_idle_tool_call:
             return
 
-        responses = list(self._pending_tool_responses)
-        self._pending_tool_responses.clear()
+        group.responses.append(types.FunctionResponse(id=call_id, name=tool_name, response=result_dict))
 
+        # Flush only once every call in *this* group has completed.
+        if group.pending:
+            return
+
+        await self._send_tool_responses(group.responses)
+
+    async def _send_tool_responses(self, responses: list[types.FunctionResponse]) -> None:
+        """Send one completed group's FunctionResponses to the live session."""
         session = self.connection
         if session is None:
             logger.warning(
