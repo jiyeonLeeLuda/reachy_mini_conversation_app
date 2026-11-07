@@ -18,6 +18,9 @@ Layout (see oss_plan/2026-11-06-weekly-insight-design.md §6.2):
 - ``summarize``  URL fetch + per-bookmark summary (track B)
 - ``insight``    clusters/correlations → insight note (track B)
 - ``session``    insight-conversation state machine (M6)
+- ``api``        the five operations as plain functions; the app tools and
+                 the MCP server both call these (M9)
+- ``mcp_server`` optional MCP server over ``api`` for external clients (M9)
 """
 
 from deskmate.models import Bookmark, InsightNote, InsightCluster

@@ -15,7 +15,7 @@ import pytest
 
 import deskmate.summarize.fetch as fetch_mod
 import deskmate.summarize.runner as runner_mod
-import reachy_mini_conversation_app.tools._deskmate_common as common
+from deskmate import api
 from deskmate.store import read_note, iter_bookmarks
 from deskmate.session import SESSION_MANAGER
 from reachy_mini_conversation_app.tools.core_tools import ToolDependencies
@@ -56,16 +56,16 @@ def e2e_env(empty_repo: Path, chrome_user_data: Path, monkeypatch: pytest.Monkey
     monkeypatch.setenv("DESKMATE_CHROME_PROFILES", "Default")
     monkeypatch.delenv("DESKMATE_DEFAULT_PROFILE", raising=False)
     monkeypatch.delenv("GEMINI_API_KEY", raising=False)
-    monkeypatch.setattr(common, "_today", lambda: TODAY)
+    monkeypatch.setattr(api, "_today", lambda: TODAY)
     monkeypatch.setattr(runner_mod, "_sleep", lambda _s: None)
     monkeypatch.setattr(
         fetch_mod, "build_client", lambda transport=None: httpx.Client(transport=httpx.MockTransport(_handler))
     )
     SESSION_MANAGER.reset()
-    common.reset_sync_throttle()
+    api.reset_sync_throttle()
     yield empty_repo
     SESSION_MANAGER.reset()
-    common.reset_sync_throttle()
+    api.reset_sync_throttle()
 
 
 @pytest.mark.asyncio

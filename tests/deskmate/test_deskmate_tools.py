@@ -15,8 +15,8 @@ import deskmate.sync as sync_mod
 import deskmate.insight as insight_mod
 import reachy_mini_conversation_app.tools as tools_pkg
 import reachy_mini_conversation_app.tools.build_insight as build_insight_mod
-import reachy_mini_conversation_app.tools._deskmate_common as common
 import reachy_mini_conversation_app.deskmate_transcript_log as transcript_log_mod
+from deskmate import api
 from deskmate.sync import SyncReport
 from deskmate.store import note_path, read_note, read_bookmark, modify_bookmark
 from deskmate.models import Bookmark, InsightNote
@@ -54,16 +54,16 @@ def _fixed_today_and_clean_session(monkeypatch: pytest.MonkeyPatch) -> Any:
     more bookmarks than the sample repo, so an unthrottled sync would make every
     "ready" expectation stale; tests that want the sync call ``reset_sync_throttle``.
     """
-    monkeypatch.setattr(common, "_today", lambda: TODAY)
+    monkeypatch.setattr(api, "_today", lambda: TODAY)
     monkeypatch.setattr(transcript_log_mod, "TRANSCRIPT_LOG", None)  # conclusion-only unless a test installs one
     SESSION_MANAGER.reset()
-    common.reset_sync_throttle()
-    common.reset_building()
-    common._LAST_SYNC_AT["Default"] = time.monotonic()
+    api.reset_sync_throttle()
+    api.reset_building()
+    api._LAST_SYNC_AT["Default"] = time.monotonic()
     yield
     SESSION_MANAGER.reset()
-    common.reset_sync_throttle()
-    common.reset_building()
+    api.reset_sync_throttle()
+    api.reset_building()
 
 
 @pytest.fixture
@@ -147,9 +147,9 @@ async def test_get_insight_empty_period_uses_korean_empty_line(env: Path) -> Non
 
 def test_empty_period_label_defaults_to_last_week() -> None:
     """Without since/until the empty line says 지난 일주일 (or 지난 N일)."""
-    assert common.resolve_period_args(None, None, None).label() == "지난 일주일"
-    assert common.resolve_period_args(7, None, None).label() == "지난 일주일"
-    assert common.resolve_period_args(30, None, None).label() == "지난 30일"
+    assert api.resolve_period_args(None, None, None).label() == "지난 일주일"
+    assert api.resolve_period_args(7, None, None).label() == "지난 일주일"
+    assert api.resolve_period_args(30, None, None).label() == "지난 30일"
 
 
 @pytest.mark.asyncio
@@ -532,11 +532,11 @@ async def test_read_tools_sync_chrome_before_reading(env: Path, chrome_user_data
         NEW_ID,
         datetime(2026, 11, 6, 9, tzinfo=timezone.utc),
     )
-    common.reset_sync_throttle()
+    api.reset_sync_throttle()
     listed = await ListBookmarks()(_deps(), days=7)
     assert NEW_ID in {item["id"] for item in listed["bookmarks"]}
 
-    common.reset_sync_throttle()
+    api.reset_sync_throttle()
     result = await GetInsight()(_deps(), days=7)
     assert result["status"] == "generating"  # the note no longer covers the period
     assert SESSION_MANAGER.current() is None
@@ -552,7 +552,7 @@ async def test_sync_before_read_is_throttled(env: Path, monkeypatch: pytest.Monk
         return SyncReport()
 
     monkeypatch.setattr(sync_mod, "sync_profiles", _record)
-    common.reset_sync_throttle()
+    api.reset_sync_throttle()
     await ListBookmarks()(_deps(), days=7)
     await GetInsight()(_deps(), days=7)
     assert calls == [["Default"]]
@@ -566,10 +566,10 @@ async def test_sync_failure_does_not_break_read_tools(env: Path, monkeypatch: py
         raise OSError("chrome locked")
 
     monkeypatch.setattr(sync_mod, "sync_profiles", _crash)
-    common.reset_sync_throttle()
+    api.reset_sync_throttle()
     result = await GetInsight()(_deps(), days=7)
     assert result["status"] == "ready" and "chrome locked" in result["sync_warning"]
-    common.reset_sync_throttle()
+    api.reset_sync_throttle()
     assert (await ListBookmarks()(_deps(), days=7))["count"] == 3
 
 
@@ -838,10 +838,10 @@ async def test_get_insight_is_backfilling_while_build_insight_runs(env: Path, mo
     monkeypatch.setattr(insight_mod, "build_insight", _slow_build)
     task = asyncio.create_task(BuildInsight()(_deps(), since="2026-10-31", until="2026-11-06"))
     for _ in range(200):
-        if common.is_building("Default", WEEK):
+        if api.is_building("Default", WEEK):
             break
         await asyncio.sleep(0.01)
-    assert common.is_building("Default", WEEK)
+    assert api.is_building("Default", WEEK)
 
     meanwhile = await GetInsight()(_deps(), days=7)
     assert meanwhile["status"] == "backfilling"
@@ -853,7 +853,7 @@ async def test_get_insight_is_backfilling_while_build_insight_runs(env: Path, mo
 
     release.set()
     built = await task
-    assert built["status"] == "ready" and not common.is_building("Default", WEEK)
+    assert built["status"] == "ready" and not api.is_building("Default", WEEK)
     assert (await GetInsight()(_deps(), days=7))["status"] == "ready"
 
 
@@ -866,5 +866,5 @@ async def test_building_registry_is_cleared_after_a_failed_build(env: Path, monk
 
     monkeypatch.setattr(insight_mod, "build_insight", _boom)
     assert "error" in await BuildInsight()(_deps(), days=7)
-    assert not common.is_building("Default", WEEK)
+    assert not api.is_building("Default", WEEK)
     assert (await GetInsight()(_deps(), days=7))["status"] == "ready"

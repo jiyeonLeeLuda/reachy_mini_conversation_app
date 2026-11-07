@@ -1,32 +1,20 @@
-"""List non-archived bookmarks in a period, newest first (design doc §2.2)."""
+"""List non-archived bookmarks in a period, newest first (design doc §2.2). Wraps ``deskmate.api.list_bookmarks``."""
 
 from __future__ import annotations
 import time
 import logging
 from typing import Any
 
-from deskmate.store import bookmarks_in_period
+from deskmate import api
+from deskmate.api import MAX_LIMIT, DEFAULT_LIMIT, LIST_NEXT_ACTION
 from reachy_mini_conversation_app.tools.core_tools import Tool, ToolDependencies
 from reachy_mini_conversation_app.tools.get_insight import PERIOD_PROPERTIES
-from reachy_mini_conversation_app.tools._deskmate_common import (
-    ToolContext,
-    today_iso,
-    elapsed_ms,
-    profile_hint,
-    prepare_context,
-    sync_before_read,
-)
+from reachy_mini_conversation_app.tools._deskmate_common import log_args, elapsed_ms, profile_hint
 
 
 logger = logging.getLogger(__name__)
 
-DEFAULT_LIMIT = 20
-MAX_LIMIT = 200
-
-LIST_NEXT_ACTION = (
-    "목록은 보조 자료다. 사용자가 찾는 북마크를 짧게 줄인 제목으로 짚어 주고, 내용이 궁금하면 그 id로 "
-    "get_bookmark를 호출하라. 개수나 읽었는지로 평가하지 마라."
-)
+__all__ = ["DEFAULT_LIMIT", "LIST_NEXT_ACTION", "MAX_LIMIT", "ListBookmarks"]
 
 
 class ListBookmarks(Tool):
@@ -57,33 +45,13 @@ class ListBookmarks(Tool):
     async def __call__(self, deps: ToolDependencies, **kwargs: Any) -> dict[str, Any]:
         """Return the compact bookmark list for the period."""
         started = time.perf_counter()
-        logger.info("list_bookmarks start: %s", {k: v for k, v in kwargs.items() if k != "tool_manager"})
-        try:
-            result = self._run(kwargs)
-        except Exception as exc:
-            logger.exception("list_bookmarks failed")
-            result = {"error": f"{type(exc).__name__}: {exc}"}
+        logger.info("list_bookmarks start: %s", log_args(kwargs))
+        result = api.list_bookmarks(
+            days=kwargs.get("days"),
+            since=kwargs.get("since"),
+            until=kwargs.get("until"),
+            profile=kwargs.get("profile"),
+            limit=kwargs.get("limit"),
+        )
         logger.info("list_bookmarks done in %.0f ms: count=%s", elapsed_ms(started), result.get("count", "error"))
         return result
-
-    def _run(self, kwargs: dict[str, Any]) -> dict[str, Any]:
-        ctx = prepare_context(kwargs)
-        if not isinstance(ctx, ToolContext):
-            return ctx
-        raw_limit = kwargs.get("limit")
-        try:
-            limit = DEFAULT_LIMIT if raw_limit is None else int(raw_limit)
-        except (TypeError, ValueError):
-            return {"error": f"limit must be an integer, got {raw_limit!r}"}
-        limit = max(1, min(MAX_LIMIT, limit))
-
-        sync_before_read(ctx.settings, ctx.profile)
-        bookmarks = bookmarks_in_period(ctx.settings, ctx.profile, ctx.period)[:limit]
-        return {
-            "today": today_iso(),
-            "profile": ctx.profile,
-            "period": ctx.period.to_dict(),
-            "count": len(bookmarks),
-            "bookmarks": [bookmark.to_tool_summary() for bookmark in bookmarks],
-            "next_action": LIST_NEXT_ACTION,
-        }
