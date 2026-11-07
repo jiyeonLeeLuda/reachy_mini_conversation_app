@@ -19,6 +19,10 @@ Decisions where §2.4 leaves room, all applied per profile and never across:
   because the setting changed.
 - ``now`` carries the local timezone: its ``tzinfo`` (system local when
   omitted or naive) turns ``date_added`` into the front matter ``date``.
+- With ``settings.git_mirror`` on (M9, off by default) the files this run
+  created / updated / archived are committed right after they are written,
+  still inside the repository lock. A mirror failure is a warning: the
+  markdown files are the product, the git log is a convenience.
 """
 
 import logging
@@ -47,6 +51,7 @@ from deskmate.sync.chrome import (
 )
 from deskmate.sync.naming import normalize_url, build_bookmark_path
 from deskmate.sync.report import SyncReport
+from deskmate.sync.git_mirror import SyncChanges, commit_changes
 
 
 logger = logging.getLogger(__name__)
@@ -140,7 +145,9 @@ def sync_profiles(
             logger.warning(report.warnings[-1])
             continue
         with repo_lock(settings):
-            _sync_profile(settings, profile, bookmark_docs, report, now, since)
+            changes = _sync_profile(settings, profile, bookmark_docs, report, now, since)
+            if settings.git_mirror:
+                _mirror_to_git(settings, folder, changes, report, now)
         report.profiles.append(folder)
         logger.info(
             "Synced Chrome profile %s (%s): created=%d updated=%d archived=%d excluded=%d",
@@ -154,6 +161,22 @@ def sync_profiles(
     return report
 
 
+def _mirror_to_git(
+    settings: DeskmateSettings, folder: str, changes: SyncChanges, report: SyncReport, now: datetime
+) -> None:
+    """Commit this run's files (M9). Never raises: the markdown is already written."""
+    try:
+        mirror = commit_changes(settings, changes, now=now)
+    except Exception as exc:
+        report.warnings.append(f"profile {folder!r}: git mirror failed: {exc}")
+        logger.warning(report.warnings[-1])
+        return
+    report.mirror_commits[folder] = mirror.total
+    for warning in mirror.warnings:
+        report.warnings.append(f"profile {folder!r}: git mirror: {warning}")
+        logger.warning(report.warnings[-1])
+
+
 def _sync_profile(
     settings: DeskmateSettings,
     profile: ChromeProfile,
@@ -161,7 +184,8 @@ def _sync_profile(
     report: SyncReport,
     now: datetime,
     since: date | None,
-) -> None:
+) -> SyncChanges:
+    """Apply the §2.4 policy for one profile; return the files written (for the optional git mirror)."""
     folder = profile.folder
     excluded_names = {nfc(name).casefold() for name in settings.exclude_folders}
     include_keys = tuple(nfc(key).strip("/ ") for key in settings.include_folders if key.strip("/ "))
@@ -185,7 +209,7 @@ def _sync_profile(
     for bookmark in sorted(existing, key=lambda item: item.archived):  # prefer a live file over an archived one
         by_url.setdefault(normalize_url(bookmark.url), bookmark)
 
-    created = updated = archived = 0
+    changes = SyncChanges()
     matched: set[str] = set()
     for key, group in groups.items():
         target = next((by_guid[guid] for guid in group.guids if guid in by_guid), None) or by_url.get(key)
@@ -194,7 +218,7 @@ def _sync_profile(
                 continue  # two Chrome URL groups map to one legacy file; the first one wins
             matched.add(target.guid)
             if _update_existing(target, group, profile.name, now):
-                updated += 1
+                changes.updated.append(Path(target.path))
             continue
 
         primary = group.primary
@@ -217,18 +241,20 @@ def _sync_profile(
             profile_name=profile.name,
             last_used=group.last_used(now),
         )
-        write_bookmark(bookmark, build_bookmark_path(settings, folder, day, primary.title, primary.guid))
-        created += 1
+        changes.created.append(
+            write_bookmark(bookmark, build_bookmark_path(settings, folder, day, primary.title, primary.guid))
+        )
 
     for bookmark in existing:
         if bookmark.guid not in matched and not bookmark.archived:
             modify_bookmark(Path(bookmark.path), _archive)
-            archived += 1
+            changes.archived.append(Path(bookmark.path))
 
-    report.created[folder] = created
-    report.updated[folder] = updated
-    report.archived[folder] = archived
+    report.created[folder] = len(changes.created)
+    report.updated[folder] = len(changes.updated)
+    report.archived[folder] = len(changes.archived)
     report.excluded[folder] = excluded
+    return changes
 
 
 def _update_existing(target: Bookmark, group: _UrlGroup, profile_name: str | None, now: datetime) -> bool:

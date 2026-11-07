@@ -1,4 +1,8 @@
-"""Manual sync run: ``python -m deskmate.sync [--discover] [--profile NAME ...] [--repo PATH] [--chrome-dir PATH] [-v]``."""
+"""Manual sync run.
+
+``python -m deskmate.sync [--discover] [--profile NAME ...] [--repo PATH] [--chrome-dir PATH]
+[--git-mirror] [--git-rebuild] [-v]``
+"""
 
 import sys
 import logging
@@ -8,9 +12,16 @@ from dataclasses import replace
 
 from dotenv import find_dotenv, load_dotenv
 
-from deskmate.settings import ENV_BOOKMARK_REPO, ENV_CHROME_PROFILES, ENV_CHROME_USER_DATA_DIR, load_settings
+from deskmate.settings import (
+    ENV_BOOKMARK_REPO,
+    ENV_CHROME_PROFILES,
+    ENV_CHROME_USER_DATA_DIR,
+    DeskmateSettings,
+    load_settings,
+)
 from deskmate.sync.chrome import ChromeReadError, load_json, iter_url_nodes, discover_user_data, default_user_data_dir
 from deskmate.sync.mirror import sync_profiles
+from deskmate.sync.git_mirror import GitMirrorError, rebuild_history
 
 
 def discover(chrome_dir: Path | None) -> int:
@@ -54,6 +65,29 @@ def discover(chrome_dir: Path | None) -> int:
     return 0
 
 
+def git_rebuild(settings: DeskmateSettings, profiles: list[str] | None) -> int:
+    """Rebuild the git history of the bookmark repository (M9) and print the commit count."""
+    total = 0
+    targets: list[str | None] = list(profiles) if profiles else [None]
+    try:
+        for profile in targets:
+            report = rebuild_history(settings, profile=profile)
+            total += report.total
+            label = f"{profile}: " if profile else ""
+            print(
+                f"{label}git mirror: {report.total} commits (bookmarks={report.bookmarks} updates={report.updates} "
+                f"archives={report.archives} skipped={report.skipped}"
+                f"{', repository initialized' if report.initialized else ''})"
+            )
+            for warning in report.warnings:
+                print(f"warning: {warning}", file=sys.stderr)
+    except GitMirrorError as exc:
+        print(f"git mirror failed: {exc}", file=sys.stderr)
+        return 1
+    print(f"total commits: {total}")
+    return 0
+
+
 def main(argv: list[str] | None = None) -> int:
     """Run one sync with settings from ``.env``/environment and print a per-profile summary."""
     parser = argparse.ArgumentParser(
@@ -68,6 +102,14 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--repo", type=Path, help="bookmark repository (overrides DESKMATE_BOOKMARK_REPO)")
     parser.add_argument(
         "--chrome-dir", type=Path, help="Chrome User Data directory (overrides DESKMATE_CHROME_USER_DATA_DIR)"
+    )
+    parser.add_argument(
+        "--git-mirror", action="store_true", help="commit this run's files to git (forces DESKMATE_GIT_MIRROR on)"
+    )
+    parser.add_argument(
+        "--git-rebuild",
+        action="store_true",
+        help="no sync: (re)build the git history from the bookmark files, one back-dated commit per bookmark",
     )
     parser.add_argument("-v", "--verbose", action="store_true", help="debug logging")
     args = parser.parse_args(argv)
@@ -88,13 +130,20 @@ def main(argv: list[str] | None = None) -> int:
     if not settings.configured:
         print("DESKMATE_BOOKMARK_REPO is not set (or pass --repo)", file=sys.stderr)
         return 2
+    if args.git_rebuild:
+        return git_rebuild(settings, args.profile)
+    if args.git_mirror:
+        settings = replace(settings, git_mirror=True)
 
     report = sync_profiles(settings, profiles=args.profile)
     for profile in report.profiles:
-        print(
+        line = (
             f"{profile}: created={report.created[profile]} updated={report.updated[profile]} "
             f"archived={report.archived[profile]} excluded={report.excluded[profile]}"
         )
+        if profile in report.mirror_commits:
+            line += f" git_commits={report.mirror_commits[profile]}"
+        print(line)
     for profile in report.skipped_profiles:
         print(f"{profile}: skipped (not in allow list)")
     for warning in report.warnings:

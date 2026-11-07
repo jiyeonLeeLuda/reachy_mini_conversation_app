@@ -13,4 +13,5 @@ class SyncReport:
     updated: dict[str, int] = field(default_factory=dict)
     archived: dict[str, int] = field(default_factory=dict)
     excluded: dict[str, int] = field(default_factory=dict)  # private folders etc. (never exposed to the model)
+    mirror_commits: dict[str, int] = field(default_factory=dict)  # git commits per profile (only with git_mirror on)
     warnings: list[str] = field(default_factory=list)
