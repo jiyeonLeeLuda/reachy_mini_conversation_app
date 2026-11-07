@@ -12,17 +12,19 @@ from __future__ import annotations
 import time
 import logging
 from typing import Any
-from datetime import date, datetime
+from datetime import date
 from dataclasses import dataclass
 
 from deskmate.store import list_profiles
 from deskmate.models import InsightNote
 from deskmate.periods import Period, PeriodError, resolve_period
-from deskmate.session import SESSION_MANAGER
+from deskmate.session import SESSION_MANAGER, now_local_label
 from deskmate.settings import ENV_BOOKMARK_REPO, DeskmateSettings, load_settings
 
 
 logger = logging.getLogger(__name__)
+
+__all__ = ["now_local_label"]  # re-exported from deskmate.session for the tools
 
 # --- tuning constants ---------------------------------------------------------
 FALLBACK_PROFILE = "Default"
@@ -50,11 +52,6 @@ def _today() -> date:
 def today_iso() -> str:
     """ISO ``today`` included in every successful tool result (§2.2)."""
     return _today().isoformat()
-
-
-def now_local_label() -> str:
-    """Local ``YYYY-MM-DD HH:MM`` used in ``## 대화 기록`` headings."""
-    return datetime.now().strftime("%Y-%m-%d %H:%M")
 
 
 def elapsed_ms(started: float) -> float:

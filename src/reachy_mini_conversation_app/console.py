@@ -152,6 +152,9 @@ class LocalStream:
         # Local acoustic wake-word listener.  None when disabled or engine fails to load.
         # The listener's asyncio loop is wired in run() after the event loop starts.
         self._wake_listener: Any = self._try_create_wake_listener()
+        # App-side activity observers (DeskMate heartbeat etc.). Kept here, not on the
+        # handler, so they survive handler rebuilds.
+        self._extra_activity_observers: list[Callable[[str], None]] = []
         self._install_handler(handler)
 
     def _install_handler(self, handler: ConversationHandler) -> None:
@@ -290,8 +293,12 @@ class LocalStream:
         "assistant_transcript_done": "ready",
     }
 
+    def add_activity_observer(self, observer: Callable[[str], None]) -> None:
+        """Register an app-side activity observer, called with the reason after the RPC fan-out."""
+        self._extra_activity_observers.append(observer)
+
     def _dispatch_activity(self, reason: str) -> None:
-        """Fan one activity reason out to JSON-RPC clients."""
+        """Fan one activity reason out to JSON-RPC clients and app-side observers."""
         if self._rpc is not None:
             # Raw reason (the browser orb maps it exactly like the old SSE feed)...
             self._rpc.broadcast_threadsafe("conversation.activity", {"reason": reason})
@@ -300,6 +307,11 @@ class LocalStream:
             if state and state != self._last_turn_state:
                 self._last_turn_state = state
                 self._rpc.broadcast_threadsafe("conversation.turn", {"state": state})
+        for observer in list(self._extra_activity_observers):
+            try:
+                observer(reason)
+            except Exception:
+                logger.debug("activity observer raised (ignored)", exc_info=True)
 
     def _emit_phase(self, phase: str, reason: Optional[str] = None) -> None:
         """Push a conversation.phase notification to JSON-RPC clients."""

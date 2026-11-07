@@ -15,6 +15,10 @@ logger = logging.getLogger(__name__)
 
 ALLOWED_REASONS = ("explicit", "confirmed")
 FINISH_NEXT_ACTION = "짧게 마무리 인사를 하라"
+NO_SESSION_NEXT_ACTION = (
+    "인사이트 세션이 이미 닫혀 있다(자동 종료됐거나 아직 시작하지 않았다). "
+    "사용자에게 짧게 알리고, 이어서 하려면 get_insight를 다시 호출하라."
+)
 
 
 class FinishInsight(Tool):
@@ -67,10 +71,10 @@ class FinishInsight(Tool):
         if not conclusion:
             return {"error": "conclusion is required"}
         if SESSION_MANAGER.current() is None:
-            return {"error": "no open insight session"}
+            return {"error": "no open insight session", "next_action": NO_SESSION_NEXT_ACTION}
         session = SESSION_MANAGER.close()
         if session is None:  # closed concurrently by the app-side state machine
-            return {"error": "no open insight session"}
+            return {"error": "no open insight session", "next_action": NO_SESSION_NEXT_ACTION}
         append_conversation_section(session.note_path, now_local_label(), conclusion)
         logger.info("finish_insight: recorded conclusion (%s) in %s", reason, session.note_path)
         return {"ok": True, "note_path": str(session.note_path), "reason": reason, "next_action": FINISH_NEXT_ACTION}
