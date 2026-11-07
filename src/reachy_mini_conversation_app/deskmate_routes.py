@@ -327,6 +327,7 @@ class DeskmateOps:
             "profiles": list(report.profiles),
             "skipped_profiles": list(report.skipped_profiles),
             "counts": counts,
+            "mirror_commits": dict(report.mirror_commits),  # commits per profile; empty unless DESKMATE_GIT_MIRROR=1
             "warnings": list(report.warnings),
             "started_at": started_at,
             "finished_at": finished_at,

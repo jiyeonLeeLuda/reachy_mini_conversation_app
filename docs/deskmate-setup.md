@@ -39,6 +39,13 @@ Chrome 북마크를 마크다운 저장소(옵시디언 볼트)로 동기화하�
 2. 페르소나 `deskmate_ko`는 Personalities 화면에서 고릅니다("Set as default"가 `REACHY_MINI_CUSTOM_PROFILE`을 저장).
 3. "10월 31일부터 11월 6일까지 북마크 얘기하자" → `ready` 노트로 바로 대화.
 
+## 그 밖의 .env 값 (대시보드가 쓰지 않는 것)
+
+대시보드는 위 세 키만 씁니다. 나머지는 `.env.example` 7절 주석을 보고 직접 적습니다: 요약 배치의 하루 상한
+`DESKMATE_DAILY_MAX_SUMMARIES`(기본 100, 넘치면 다음 날 백필, M7)와 호출 간격 `DESKMATE_CALL_INTERVAL_S`(기본 6초),
+그리고 저장소 미러 `DESKMATE_GIT_MIRROR=1`(기본 끔, M9 — 켜면 동기화 결과 표 위에 프로필별 미러 커밋 수가 함께 나오고,
+과거 이력은 `python -m deskmate.sync --git-rebuild`로 재구성합니다).
+
 같은 일을 터미널로 하려면: `python -m deskmate.sync --discover`(탐색), `python -m deskmate.sync`(동기화),
 `python scripts/deskmate_demo_setup.py ~/deskmate-demo`(데모).
 

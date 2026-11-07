@@ -313,7 +313,15 @@ export function buildDeskmateSection({ signal } = {}) {
       );
     });
     results.replaceChildren(
-      h("p", { class: "settings-hint" }, `동기화 완료 (${Math.round((data.duration_ms || 0) / 100) / 10}초)${data.skipped_profiles.length ? ` · 건너뜀: ${data.skipped_profiles.join(", ")}` : ""}`),
+      h(
+        "p",
+        { class: "settings-hint" },
+        `동기화 완료 (${Math.round((data.duration_ms || 0) / 100) / 10}초)` +
+          (data.skipped_profiles.length ? ` · 건너뜀: ${data.skipped_profiles.join(", ")}` : "") +
+          (Object.keys(data.mirror_commits || {}).length
+            ? ` · 미러 커밋: ${Object.entries(data.mirror_commits).map(([folder, count]) => `${folder} ${count}`).join(", ")}`
+            : "")
+      ),
       rows.length
         ? h(
             "table",

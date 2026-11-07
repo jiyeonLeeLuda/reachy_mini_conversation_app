@@ -235,6 +235,7 @@ def test_sync_reports_counts_and_records_last_sync(
     assert first["profiles"] == ["Default"] and first["skipped_profiles"] == ["Profile 1"]
     assert set(first["counts"]["Default"]) == {"created", "updated", "archived", "excluded"}
     assert first["counts"]["Default"]["created"] >= 0 and first["warnings"] == []
+    assert first["mirror_commits"] == {}  # mirror is off by default (M9)
     assert isinstance(first["duration_ms"], int)
     assert first["started_at"].endswith("Z") and first["finished_at"].endswith("Z")
 
