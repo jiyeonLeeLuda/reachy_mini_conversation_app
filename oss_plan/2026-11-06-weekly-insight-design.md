@@ -1,8 +1,8 @@
 # 소프트웨어 설계서 (SDD): 리치미니 데스크메이트 — 기능 1 위클리 인사이트
 
-- **문서 버전**: 0.8.4
+- **문서 버전**: 0.8.5
 - **작성일**: 2026-11-06
-- **상태**: 요구사항 확정 · 1~6장 확정 · 검수 반영 · Chrome 다중 프로필 반영 · **구현 M0~M6 완료, 에뮬레이터 시나리오 1·2·4·5·6 통과, 3은 통과율 측정 중** (2026-11-07)
+- **상태**: 요구사항 확정 · 1~6장 확정 · 검수 반영 · Chrome 다중 프로필 반영 · **구현 M0~M6 완료, 에뮬레이터 시나리오 1~6 통과 (3은 프롬프트 보강 후 2/2, 누계 2/6)** (2026-11-07)
 - **검수**: 2026-11-06 20년차 풀스택 관점 서브에이전트 검수 반영 (부록 C)
 - **베이스**: upstream `reachy_mini_conversation_app` (OpenAI/Gemini realtime 백엔드, `tools/`의 `Tool` 서브클래스로 기능 확장)
 
@@ -548,7 +548,7 @@ tests/deskmate/
 | M2 | 완료 | `deskmate.sync` (A 트랙, 테스트 43) + `python -m deskmate.sync` CLI |
 | M3·M4 | 완료 | `deskmate.summarize`·`deskmate.insight` (B 트랙, 테스트 25) |
 | M5 | 완료 | 도구 5개 (C 트랙, 테스트 28) + 종단 테스트 `test_deskmate_e2e.py` (A+B+C 합류) |
-| M6 | 완료 | `deskmate.session`에 `close_if_idle`·`auto_finish`(노트에 `_자동 종료: <사유>_` 절 기록) 추가. 앱 훅 `deskmate_hooks.py`: activity observer heartbeat(`LocalStream.add_activity_observer` 팬아웃), 무응답 감시 스레드(2초 폴링, `DESKMATE_INSIGHT_IDLE_TIMEOUT_MIN`), `go_to_sleep_action` 진입·앱 종료 `finally`에서 자동 마감. `finish_insight` 세션 없음 오류에 `next_action` 추가. 코드 완료 + 실기기(시뮬 + 실제 Chrome 북마크) 검증 2026-11-07: 시나리오 1 통과(생성 → 묶음+질문 → explicit 종료 → 노트), 2 통과(빈 기간 멘트), 4 통과(본문 미확보 → 노트 '본문 미확보' 절, 기존 대화 기록 절 보존), 5 통과(무응답 1분 자동 종료 절, 앱 종료 절 실측; 슬립 경로는 단위 테스트), 6 통과(동기화 로그에 프로필 열거·Profile 1 건너뜀·폴더 미생성, 미허용 프로필 요청 → unknown profile + available). 시나리오 3은 1/5 통과(새 세션에서는 '마칠까?' 질문 후 confirmed 종료 + 뽀모도로; 긴 맥락·전사 흔들림에서는 바로 뽀모도로) → 프롬프트 보강 후 재측정 |
+| M6 | 완료 | `deskmate.session`에 `close_if_idle`·`auto_finish`(노트에 `_자동 종료: <사유>_` 절 기록) 추가. 앱 훅 `deskmate_hooks.py`: activity observer heartbeat(`LocalStream.add_activity_observer` 팬아웃), 무응답 감시 스레드(2초 폴링, `DESKMATE_INSIGHT_IDLE_TIMEOUT_MIN`), `go_to_sleep_action` 진입·앱 종료 `finally`에서 자동 마감. `finish_insight` 세션 없음 오류에 `next_action` 추가. 코드 완료 + 실기기(시뮬 + 실제 Chrome 북마크) 검증 2026-11-07: 시나리오 1 통과(생성 → 묶음+질문 → explicit 종료 → 노트), 2 통과(빈 기간 멘트), 4 통과(본문 미확보 → 노트 '본문 미확보' 절, 기존 대화 기록 절 보존), 5 통과(무응답 1분·앱 종료·슬립 전환 모두 실측; 슬립 시 봇이 finish_insight를 먼저 불러 결론 기록 → 훅은 닫을 세션 없음이 정상 경로), 6 통과(동기화 로그에 프로필 열거·Profile 1 건너뜀·폴더 미생성, 미허용 프로필 요청 → unknown profile + available). 시나리오 3은 프롬프트 보강 전 1/4, 보강 후 2/2 (누계 2/6). 월간(30일) 노트 생성 17.6초, get_insight 0.35초(동기화 포함) |
 | M7~M9 | 미착수 | |
 | M10 | 계획 작성 | 2026-11-07 사용자 아이디어. 계획 문서 초안, 구현 전 검토 필요 |
 
@@ -557,7 +557,7 @@ tests/deskmate/
 - 2026-11-07 추가 (M2 보완): Chrome 로그인 계정 북마크 파일 `AccountBookmarks`도 읽어 같은 프로필 안에서 `Bookmarks`와 합친다 (로그인 상태의 Chrome은 `Bookmarks` 없이 `AccountBookmarks`만 가질 수 있음. 사용자 PC에서 확인). 파일 하나라도 깨지면 그 프로필은 건너뛴다(부분 읽기로 인한 오보관 방지). 세팅 확인용 `python -m deskmate.sync --discover`(프로필·북마크 파일·개수와 .env 줄 출력) 추가.
 - 2026-11-07 시나리오 1 실제 북마크로 통과 (generating → ready → 묶음+질문 → explicit 종료 → 노트 기록). build_insight 894초 소요 원인은 배치 모델 지연 → 기본값을 gemini-3.5-flash로 변경.
 - 2026-11-07 실측 이슈와 대응 (커밋 cb6604c, 8150ee9, 6e65159): (a) Gemini Live 백엔드가 도구 응답을 앱 전체 하나의 묶음으로 보내 긴 도구(build_insight, pomodoro_timer)가 도는 동안 task_status 응답이 전달되지 않아 봇이 침묵 → 서버 메시지 단위 묶음으로 수정. (b) 배치 모델 호출이 SDK 기본 재시도(5회, 1→60초)로 2~4분 대기 후 503 → 30초 타임아웃·2회 재시도·thinking_budget 0, 요약 실패는 pending 유지 후 계속, 묶음 실패 시 직전 노트를 degraded ready로 제공. (c) 사용자가 작업 중인지 알 수 없음 → build_insight 동안 효과음(시작·1초 틱·완료)과 안테나 모션(deskmate_progress.py). (d) Chrome에 새로 저장한 북마크가 build_insight 전엔 보이지 않음 → get_insight/list_bookmarks가 읽기 전 동기화(30초 스로틀). (e) 봇이 맞장구를 마무리로 오해해 세션을 조기 종료, 이후 진짜 종료가 유실 → 마지막 닫힌 세션 기억 후 finish_insight가 그 노트에 기록(reopened_last), 프롬프트에 명시 마무리 규칙. (f) generating 뒤 봇이 말없이 build_insight만 호출 → 프롬프트에 '먼저 소리 내어 말하기'.
-- 2026-11-07 관찰 (미해결): Live 모델의 thinking 텍스트가 assistant 전사로 로그에 섞임(role=assistant content=thought …); 앱이 회의 중 Google Meet 음성을 그대로 듣고 응답함(마이크 게이팅 필요); 첫 묶음 발화가 길어 되물음(프롬프트로 2문장 제한 적용, 재측정 필요).
+- 2026-11-07 관찰 (미해결): Live 모델의 thinking 텍스트가 assistant 전사로 로그에 섞임(role=assistant content=thought …); 앱이 회의 중 Google Meet 음성을 그대로 듣고 응답함(마이크 게이팅 필요); 첫 묶음 발화가 길어 되물음(프롬프트로 2문장 제한 적용, 재측정 필요); 슬립 5초 뒤 웨이크 워드 엔진이 점수 1.000으로 자동 기상(17:45:45, 사용자가 부르지 않음) → 웨이크 워드 모듈 오탐 가능성, 담당 전달; 효과음 틱 간격은 사용자 피드백으로 1초 확정(커밋 1cffc0d).
 
 ### 6.4 병렬 트랙과 합류
 
