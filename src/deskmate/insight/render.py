@@ -14,6 +14,9 @@ from deskmate.models import Bookmark, InsightNote
 
 NOTE_TITLE_PREFIX = "# 위클리 인사이트"
 UNAVAILABLE_HEADING = "## 본문 미확보"
+PENDING_HEADING = "## 미요약"  # M7 partial note: bookmarks the batch has not summarized yet
+PENDING_LINE = "아직 요약하지 않은 북마크 {count}건"
+PENDING_MAX_TITLES = 10  # titles listed under the heading; the rest is "… 외 N건"
 CORRELATION_LABEL = "**관계**"
 QUESTION_LABEL = "**질문**"
 
@@ -37,8 +40,26 @@ def _link_line(bookmark_id: str, targets: dict[str, str]) -> str:
     return f"- [[{stem}]]" if stem else f"- ({bookmark_id})"
 
 
+def render_pending_section(note: InsightNote, bookmarks: list[Bookmark]) -> list[str]:
+    """Lines of the ``## 미요약`` section of a partial note (empty list when nothing is pending)."""
+    if not note.pending:
+        return []
+    titles = {bookmark.guid: bookmark.title for bookmark in bookmarks}
+    lines = ["", PENDING_HEADING, PENDING_LINE.format(count=len(note.pending))]
+    shown = note.pending[:PENDING_MAX_TITLES]
+    lines.extend(f"- {_one_line(titles.get(bookmark_id) or '') or f'({bookmark_id})'}" for bookmark_id in shown)
+    rest = len(note.pending) - len(shown)
+    if rest > 0:
+        lines.append(f"- … 외 {rest}건")
+    return lines
+
+
 def render_note_body(note: InsightNote, bookmarks: list[Bookmark]) -> str:
-    """Render the human-readable Obsidian body (clusters, correlations, questions, ``[[links]]``)."""
+    """Render the human-readable Obsidian body (clusters, correlations, questions, ``[[links]]``).
+
+    A partial note (M7) adds ``## 미요약`` with the not-yet-summarized titles
+    before ``## 본문 미확보``.
+    """
     targets = link_targets(bookmarks)
     lines: list[str] = [f"{NOTE_TITLE_PREFIX} ({note.since.isoformat()} ~ {note.until.isoformat()})"]
     for cluster in note.clusters:
@@ -51,6 +72,7 @@ def render_note_body(note: InsightNote, bookmarks: list[Bookmark]) -> str:
         lines.append(f"{CORRELATION_LABEL}: {_one_line(cluster.correlation)}")
         lines.append("")
         lines.append(f"{QUESTION_LABEL}: {_one_line(cluster.question)}")
+    lines.extend(render_pending_section(note, bookmarks))
     if note.unavailable:
         lines.append("")
         lines.append(UNAVAILABLE_HEADING)

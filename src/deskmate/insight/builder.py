@@ -10,6 +10,13 @@ for the period, that note is returned unchanged with ``degraded=True`` and the
 titles of the bookmarks it does not cover, so the conversation can go on with
 yesterday's insight instead of an error. Without a previous note the error
 propagates (``ClusterUnavailableError``).
+
+Backfill (M7): the summarizer handles at most ``batch_max_summaries`` bookmarks
+per call and never passes the daily cap. Whatever is still ``pending`` after
+that is left out of the cluster call and listed in the note's ``pending`` front
+matter with ``complete: false`` (a *partial* note). Calling ``build_insight``
+again continues from the pending ones, because every summary is written per
+bookmark as soon as it is made; once nothing is pending the note is complete.
 """
 
 from __future__ import annotations
@@ -26,7 +33,7 @@ from deskmate.settings import DeskmateSettings
 from deskmate.summarize import summarize_bookmarks
 from deskmate.insight.render import render_note_body
 from deskmate.summarize.usage import log_usage
-from deskmate.summarize.runner import iso_utc, resolve_now
+from deskmate.summarize.runner import iso_utc, local_date, resolve_now, load_daily_count
 from deskmate.summarize.sections import summary_text
 
 
@@ -96,6 +103,16 @@ def _chronological(bookmarks: list[Bookmark]) -> list[Bookmark]:
     return sorted(bookmarks, key=lambda item: (item.date, item.title))
 
 
+def pending_bookmarks(bookmarks: list[Bookmark]) -> list[Bookmark]:
+    """Bookmarks the batch has not summarized yet (``summary_status: pending``)."""
+    return [bookmark for bookmark in bookmarks if bookmark.summary_status == "pending"]
+
+
+def daily_cap_reached(settings: DeskmateSettings, moment: datetime) -> bool:
+    """Whether today's summary counter already sits at the daily cap (pending work waits for tomorrow)."""
+    return load_daily_count(settings, local_date(moment)) >= max(0, settings.daily_max_summaries)
+
+
 def build_insight(
     settings: DeskmateSettings,
     llm: BatchLLM,
@@ -105,10 +122,13 @@ def build_insight(
     now: datetime | None = None,
     client: httpx.Client | None = None,
 ) -> InsightNote:
-    """Summarize + cluster + write the note for one profile and period.
+    """Summarize (one chunk) + cluster what is summarized + write the note for one profile and period.
 
     An empty period returns a note with no clusters and ``path=None`` and
     writes nothing. ``client`` and ``now`` are forwarded to the summarizer.
+    Bookmarks still ``pending`` after the chunk make the note partial
+    (``complete=False``, ``pending`` ids, ``daily_cap_reached`` when the daily
+    cap is what stopped the chunk); a later call continues from them.
     """
     moment = resolve_now(now)
     bookmarks = bookmarks_in_period(settings, profile, period)
@@ -121,34 +141,54 @@ def build_insight(
 
     with repo_lock(settings):
         bookmarks = _chronological(bookmarks_in_period(settings, profile, period))
+        pending = pending_bookmarks(bookmarks)
+        pending_ids = {bookmark.guid for bookmark in pending}
+        seen = [bookmark for bookmark in bookmarks if bookmark.guid not in pending_ids]
         existing = load_insight(settings, profile, period)
-        try:
-            result = llm.cluster(cluster_inputs(bookmarks))
-        except Exception as exc:
-            if existing is None:
-                raise ClusterUnavailableError(f"cluster model unavailable: {exc}") from exc
-            previous = existing[0]
-            covered = set(previous.bookmark_ids)
-            previous.degraded = True
-            previous.pending_titles = [bookmark.title for bookmark in bookmarks if bookmark.guid not in covered]
+        clusters: list[InsightCluster] = []
+        if seen:
+            try:
+                result = llm.cluster(cluster_inputs(seen))
+            except Exception as exc:
+                if existing is None:
+                    raise ClusterUnavailableError(f"cluster model unavailable: {exc}") from exc
+                previous = existing[0]
+                covered = set(previous.bookmark_ids)
+                previous.degraded = True
+                previous.pending_titles = [bookmark.title for bookmark in bookmarks if bookmark.guid not in covered]
+                logger.warning(
+                    "cluster model unavailable (%s); serving the previous note with %d uncovered bookmark(s)",
+                    exc,
+                    len(previous.pending_titles),
+                )
+                return previous
+            log_usage(settings, profile=profile, op="cluster", usage=result.usage)
+            clusters = sanitize_clusters(result.clusters, {bookmark.guid for bookmark in seen})
+        else:
             logger.warning(
-                "cluster model unavailable (%s); serving the previous note with %d uncovered bookmark(s)",
-                exc,
-                len(previous.pending_titles),
+                "nothing summarized yet for %s %s; writing a partial note without clusters", profile, period.key
             )
-            return previous
-        log_usage(settings, profile=profile, op="cluster", usage=result.usage)
-        valid_ids = {bookmark.guid for bookmark in bookmarks}
         note = InsightNote(
             profile=profile,
             since=period.since,
             until=period.until,
             generated_at=iso_utc(moment if now is not None else resolve_now(None)),
-            clusters=sanitize_clusters(result.clusters, valid_ids),
-            unavailable=[bookmark.guid for bookmark in bookmarks if bookmark.summary_status != "ok"],
+            clusters=clusters,
+            unavailable=[bookmark.guid for bookmark in seen if bookmark.summary_status != "ok"],
             bookmark_ids=[bookmark.guid for bookmark in bookmarks],
-            complete=True,
+            complete=not pending,
+            pending=[bookmark.guid for bookmark in pending],
             conversations=list(existing[0].conversations) if existing is not None else [],
+            daily_cap_reached=bool(pending) and (report.daily_cap_reached or daily_cap_reached(settings, moment)),
         )
+        if pending:
+            logger.info(
+                "partial insight note for %s %s: %d summarized, %d pending%s",
+                profile,
+                period.key,
+                note.summarized_count,
+                note.pending_count,
+                " (daily cap reached)" if note.daily_cap_reached else "",
+            )
         write_note(note, render_note_body(note, bookmarks), note_path(settings, profile, period))
     return note

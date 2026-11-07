@@ -31,6 +31,8 @@ ENV_GIT_MIRROR = "DESKMATE_GIT_MIRROR"
 ENV_BATCH_MODEL = "DESKMATE_BATCH_MODEL"
 ENV_BODY_MAX_CHARS = "DESKMATE_BODY_MAX_CHARS"
 ENV_BATCH_MAX_SUMMARIES = "DESKMATE_BATCH_MAX_SUMMARIES"
+ENV_DAILY_MAX_SUMMARIES = "DESKMATE_DAILY_MAX_SUMMARIES"
+ENV_CALL_INTERVAL_S = "DESKMATE_CALL_INTERVAL_S"
 ENV_GEMINI_API_KEY = "GEMINI_API_KEY"  # shared with the Gemini Live backend
 
 # --- defaults (tuning constants; keep in sync with design doc §2.3) ---
@@ -53,6 +55,8 @@ DEFAULT_INSIGHT_IDLE_TIMEOUT_MIN = 10
 DEFAULT_BATCH_MODEL = "gemini-3.5-flash"
 DEFAULT_BODY_MAX_CHARS = 20_000
 DEFAULT_BATCH_MAX_SUMMARIES = 20
+DEFAULT_DAILY_MAX_SUMMARIES = 100  # free-tier protection; the rest waits for tomorrow (M7 backfill)
+DEFAULT_CALL_INTERVAL_S = 6.0  # seconds between batch-model calls (requests-per-minute protection)
 INSIGHTS_DIRNAME = "insights"
 DESKMATE_STATE_DIRNAME = ".deskmate"
 USAGE_LOG_FILENAME = "usage.jsonl"
@@ -71,6 +75,16 @@ def _env_int(name: str, default: int) -> int:
         return default
     try:
         return int(raw)
+    except ValueError:
+        return default
+
+
+def _env_float(name: str, default: float) -> float:
+    raw = (os.getenv(name) or "").strip()
+    if not raw:
+        return default
+    try:
+        return float(raw)
     except ValueError:
         return default
 
@@ -107,6 +121,8 @@ class DeskmateSettings:
     batch_model: str = DEFAULT_BATCH_MODEL
     body_max_chars: int = DEFAULT_BODY_MAX_CHARS
     batch_max_summaries: int = DEFAULT_BATCH_MAX_SUMMARIES
+    daily_max_summaries: int = DEFAULT_DAILY_MAX_SUMMARIES
+    call_interval_s: float = DEFAULT_CALL_INTERVAL_S
     gemini_api_key: str | None = field(default=None, repr=False)
 
     # --- derived paths -------------------------------------------------------
@@ -193,5 +209,7 @@ def load_settings(environ: dict[str, str] | None = None) -> DeskmateSettings:
         batch_model=(os.getenv(ENV_BATCH_MODEL) or "").strip() or DEFAULT_BATCH_MODEL,
         body_max_chars=_env_int(ENV_BODY_MAX_CHARS, DEFAULT_BODY_MAX_CHARS),
         batch_max_summaries=_env_int(ENV_BATCH_MAX_SUMMARIES, DEFAULT_BATCH_MAX_SUMMARIES),
+        daily_max_summaries=_env_int(ENV_DAILY_MAX_SUMMARIES, DEFAULT_DAILY_MAX_SUMMARIES),
+        call_interval_s=_env_float(ENV_CALL_INTERVAL_S, DEFAULT_CALL_INTERVAL_S),
         gemini_api_key=(os.getenv(ENV_GEMINI_API_KEY) or "").strip() or None,
     )
