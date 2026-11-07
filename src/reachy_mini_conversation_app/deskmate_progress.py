@@ -24,7 +24,7 @@ from reachy_mini_conversation_app.tools.core_tools import ToolDependencies
 logger = logging.getLogger(__name__)
 
 # --- tuning constants -----------------------------------------------------------
-PROGRESS_TICK_S = 10.0  # seconds between ticks while working
+PROGRESS_TICK_S = 1.0  # seconds between ticks while working
 PROGRESS_TONE_HZ: tuple[float, float] = (660.0, 880.0)  # start chime (low → high); done chime reuses them rising
 PROGRESS_TONE_S = 0.12  # length of one tone
 PROGRESS_TICK_TONE_S = 0.06  # shorter single tick
