@@ -201,3 +201,49 @@ def test_build_insight_summarizes_pending_bookmarks_first(
     assert summarized.summary_status == "ok" and "CSS Grid" in summarized.body
     lines = [json.loads(line) for line in settings.resolved_usage_log.read_text(encoding="utf-8").splitlines()]
     assert [line["op"] for line in lines] == ["summarize", "cluster"]
+
+
+# --- model outage: previous note as fallback -----------------------------------------------
+
+
+class _BusyLLM(FakeLLM):
+    """Model whose cluster call is unavailable (503 / timeout)."""
+
+    def cluster(self, items: list[Any]) -> ClusterResult:
+        raise RuntimeError("503 UNAVAILABLE: high demand")
+
+
+def _write_pending(settings: DeskmateSettings, title: str, guid: str, day: date) -> Bookmark:
+    bookmark = Bookmark(title=title, url=f"https://example.com/{guid[:6]}", guid=guid, profile="Default", date=day)
+    target = settings.profile_bookmarks_dir("Default") / str(day.year) / f"{day.isoformat()} {title} {guid[:6]}.md"
+    target.parent.mkdir(parents=True, exist_ok=True)
+    write_bookmark(bookmark, target)
+    return bookmark
+
+
+def test_build_insight_serves_previous_note_when_cluster_model_is_down(
+    settings: DeskmateSettings, period: Period, offline_client: httpx.Client
+) -> None:
+    """Cluster failure + existing note → the old note comes back degraded, untouched on disk, with the new titles."""
+    path = note_path(settings, "Default", period)
+    before = path.read_text(encoding="utf-8")
+    _write_pending(settings, "새 글", "deadbeef-0000-4000-8000-000000000001", date(2026, 11, 6))
+
+    note = build_insight(settings, _BusyLLM(), "Default", period, now=NOW, client=offline_client)
+
+    assert note.degraded is True and note.pending_titles == ["새 글"]
+    assert note.path == path and path.read_text(encoding="utf-8") == before
+    assert len(note.clusters) == 2 and note.bookmark_ids == [WEBRTC_ID, ICE_ID, RUST_ID]
+
+
+def test_build_insight_without_previous_note_raises_when_model_is_down(
+    settings: DeskmateSettings, offline_client: httpx.Client
+) -> None:
+    """No note to fall back on → ClusterUnavailableError (the tool turns it into a friendly error)."""
+    from deskmate.insight import ClusterUnavailableError
+
+    period = Period(since=date(2026, 10, 1), until=date(2026, 10, 7))
+    _write_pending(settings, "시월 글", "deadbeef-0000-4000-8000-000000000002", date(2026, 10, 3))
+    with pytest.raises(ClusterUnavailableError):
+        build_insight(settings, _BusyLLM(), "Default", period, now=NOW, client=offline_client)
+    assert not note_path(settings, "Default", period).exists()

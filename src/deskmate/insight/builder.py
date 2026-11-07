@@ -4,6 +4,12 @@
 ``llm.cluster``, validates the returned bookmark ids against the period,
 renders the note and writes it atomically, keeping any ``## 대화 기록``
 sections of a previous note at the same path.
+
+When the cluster call fails (model busy, timeout) and a previous note exists
+for the period, that note is returned unchanged with ``degraded=True`` and the
+titles of the bookmarks it does not cover, so the conversation can go on with
+yesterday's insight instead of an error. Without a previous note the error
+propagates (``ClusterUnavailableError``).
 """
 
 from __future__ import annotations
@@ -25,6 +31,10 @@ from deskmate.summarize.sections import summary_text
 
 
 logger = logging.getLogger(__name__)
+
+
+class ClusterUnavailableError(RuntimeError):
+    """The batch model could not cluster and there is no previous note to fall back on."""
 
 
 def load_insight(settings: DeskmateSettings, profile: str, period: Period) -> tuple[InsightNote, str] | None:
@@ -111,10 +121,24 @@ def build_insight(
 
     with repo_lock(settings):
         bookmarks = _chronological(bookmarks_in_period(settings, profile, period))
-        result = llm.cluster(cluster_inputs(bookmarks))
+        existing = load_insight(settings, profile, period)
+        try:
+            result = llm.cluster(cluster_inputs(bookmarks))
+        except Exception as exc:
+            if existing is None:
+                raise ClusterUnavailableError(f"cluster model unavailable: {exc}") from exc
+            previous = existing[0]
+            covered = set(previous.bookmark_ids)
+            previous.degraded = True
+            previous.pending_titles = [bookmark.title for bookmark in bookmarks if bookmark.guid not in covered]
+            logger.warning(
+                "cluster model unavailable (%s); serving the previous note with %d uncovered bookmark(s)",
+                exc,
+                len(previous.pending_titles),
+            )
+            return previous
         log_usage(settings, profile=profile, op="cluster", usage=result.usage)
         valid_ids = {bookmark.guid for bookmark in bookmarks}
-        existing = load_insight(settings, profile, period)
         note = InsightNote(
             profile=profile,
             since=period.since,

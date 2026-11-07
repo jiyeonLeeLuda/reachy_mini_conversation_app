@@ -31,6 +31,7 @@ BOOKMARK_FRONTMATTER_KEYS: tuple[str, ...] = (
     "summarized_at",
     "fetch_attempts",
     "last_fetch_at",
+    "summary_error",
 )
 
 SUMMARY_HEADING = "## 요약"
@@ -57,6 +58,7 @@ class Bookmark:
     summarized_at: str | None = None
     fetch_attempts: int = 0
     last_fetch_at: str | None = None
+    summary_error: str | None = None  # last batch-model failure (503 etc.); status stays pending
     body: str = ""  # everything after the front matter; owned by the summarizer/user
     path: Any = None  # pathlib.Path once loaded from disk; not serialized
 
@@ -114,6 +116,11 @@ class InsightNote:
     complete: bool = True  # False while a backfill is still running (M7)
     conversations: list[str] = field(default_factory=list)  # raw "## 대화 기록" sections, preserved verbatim
     path: Any = None
+    # Runtime-only (never written to disk): the batch model was unavailable and this
+    # is the previous note served as a fallback; ``pending_titles`` are the bookmarks
+    # of the period it does not cover yet.
+    degraded: bool = False
+    pending_titles: list[str] = field(default_factory=list)
 
     @property
     def key(self) -> str:

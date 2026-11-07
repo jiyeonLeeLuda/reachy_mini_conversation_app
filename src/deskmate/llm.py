@@ -21,6 +21,13 @@ logger = logging.getLogger(__name__)
 
 SUMMARY_MAX_CHARS = 1200
 
+# --- fail-fast settings for the real model (2026-11-07: calls waited 2–4 min, then 503) ---
+BATCH_TIMEOUT_MS = 30_000  # google-genai HttpOptions.timeout is in milliseconds
+BATCH_RETRY_ATTEMPTS = 2  # attempts including the first request (SDK default is 5)
+BATCH_RETRY_INITIAL_DELAY_S = 2.0
+BATCH_RETRY_MAX_DELAY_S = 5.0
+BATCH_THINKING_BUDGET: int | None = 0  # 0 = no thinking tokens; None = model default
+
 
 @dataclass(frozen=True)
 class Usage:
@@ -182,11 +189,48 @@ class GeminiLLM:
     """Real batch model via ``google-genai`` (text model, not the Live model)."""
 
     def __init__(self, api_key: str, model: str) -> None:
-        """Create the Gemini client for ``model``."""
+        """Create the Gemini client for ``model`` with a short timeout and a single retry."""
         from google import genai  # imported lazily: tests never need it
+        from google.genai import types
 
-        self._client = genai.Client(api_key=api_key)
+        self._client = genai.Client(
+            api_key=api_key,
+            http_options=types.HttpOptions(
+                timeout=BATCH_TIMEOUT_MS,
+                retry_options=types.HttpRetryOptions(
+                    attempts=BATCH_RETRY_ATTEMPTS,
+                    initial_delay=BATCH_RETRY_INITIAL_DELAY_S,
+                    max_delay=BATCH_RETRY_MAX_DELAY_S,
+                ),
+            ),
+        )
         self.model = model
+        self._thinking_supported = True
+
+    def _config(self, **extra: Any) -> Any:
+        """Build a ``GenerateContentConfig`` with the thinking budget (when supported) plus ``extra``."""
+        from google.genai import types
+
+        if BATCH_THINKING_BUDGET is not None and self._thinking_supported:
+            extra["thinking_config"] = types.ThinkingConfig(thinking_budget=BATCH_THINKING_BUDGET)
+        return types.GenerateContentConfig(**extra)
+
+    def _generate(self, prompt: str, **extra: Any) -> Any:
+        """Call the model; if it rejects the thinking budget, retry once without it and remember."""
+        try:
+            return self._client.models.generate_content(
+                model=self.model, contents=prompt, config=self._config(**extra)
+            )
+        except Exception as exc:
+            if self._thinking_supported and BATCH_THINKING_BUDGET is not None and "thinking" in str(exc).lower():
+                logger.warning(
+                    "%s rejected thinking_budget=%s; retrying without it", self.model, BATCH_THINKING_BUDGET
+                )
+                self._thinking_supported = False
+                return self._client.models.generate_content(
+                    model=self.model, contents=prompt, config=self._config(**extra)
+                )
+            raise
 
     def _usage(self, response: Any) -> Usage:
         meta = getattr(response, "usage_metadata", None)
@@ -203,14 +247,12 @@ class GeminiLLM:
     def summarize(self, *, title: str, url: str, text: str) -> SummaryResult:
         """Summarize with the text model."""
         prompt = SUMMARY_PROMPT.format(title=title, url=url, text=text)
-        response = self._client.models.generate_content(model=self.model, contents=prompt)
+        response = self._generate(prompt)
         summary = (getattr(response, "text", None) or "").strip()[:SUMMARY_MAX_CHARS]
         return SummaryResult(text=summary, usage=self._usage(response))
 
     def cluster(self, items: list[SummaryInput]) -> ClusterResult:
         """Cluster with a JSON-schema constrained response."""
-        from google.genai import types
-
         payload = [
             {
                 "id": item.id,
@@ -223,13 +265,10 @@ class GeminiLLM:
             for item in items
         ]
         prompt = CLUSTER_PROMPT.format(items=json.dumps(payload, ensure_ascii=False, indent=1))
-        response = self._client.models.generate_content(
-            model=self.model,
-            contents=prompt,
-            config=types.GenerateContentConfig(
-                response_mime_type="application/json",
-                response_schema=CLUSTER_RESPONSE_SCHEMA,
-            ),
+        response = self._generate(
+            prompt,
+            response_mime_type="application/json",
+            response_schema=CLUSTER_RESPONSE_SCHEMA,
         )
         clusters = parse_clusters(getattr(response, "text", None) or "{}")
         return ClusterResult(clusters=clusters, usage=self._usage(response))

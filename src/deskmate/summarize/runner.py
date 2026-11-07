@@ -5,7 +5,9 @@ One run processes the bookmarks it is given, in order, under ``repo_lock``:
 1. skip ``ok`` (cached), archived, and ``fetch_failed`` still in back-off;
 2. mark excluded-URL bookmarks ``fetch_failed`` without any network call;
 3. for the rest, within the per-run and per-day caps, fetch → summarize →
-   write via ``modify_bookmark``; failures never abort the run.
+   write via ``modify_bookmark``; failures never abort the run. A model failure
+   (503, timeout) leaves the bookmark ``pending`` with ``summary_error`` set and
+   the run moves on; ``MAX_CONSECUTIVE_LLM_FAILURES`` in a row stop the run.
 
 ``_sleep`` is module-level so tests can replace it; the daily counter lives in
 ``<state_dir>/summarize_counter.json`` so an interrupted batch resumes safely.
@@ -29,6 +31,7 @@ from deskmate.summarize import (
     CALL_INTERVAL_S,
     RETRY_BACKOFF_DAYS,
     DAILY_MAX_SUMMARIES,
+    MAX_CONSECUTIVE_LLM_FAILURES,
     SummarizeReport,
 )
 from deskmate.summarize.fetch import FetchResult, fetch_url, client_scope
@@ -39,12 +42,13 @@ from deskmate.summarize.sections import has_real_summary, replace_summary_sectio
 logger = logging.getLogger(__name__)
 
 COUNTER_FILENAME = "summarize_counter.json"
+SUMMARY_ERROR_MAX_CHARS = 200
 
 _sleep = time.sleep  # monkeypatched in tests
 
 
 class _LLMCallError(RuntimeError):
-    """The batch model failed; the remaining batch is abandoned (§5: 429 → resume next day)."""
+    """The batch model failed for one bookmark (503, timeout, quota); the run records it and continues."""
 
 
 # --- time helpers -------------------------------------------------------------------
@@ -154,6 +158,13 @@ def _apply_success(bookmark: Bookmark, summary: str, now: datetime) -> Bookmark:
     bookmark.summarized_at = local_date(now).isoformat()
     bookmark.fetch_attempts += 1
     bookmark.last_fetch_at = iso_utc(now)
+    bookmark.summary_error = None
+    return bookmark
+
+
+def _apply_llm_failure(bookmark: Bookmark, reason: str) -> Bookmark:
+    """Keep the bookmark ``pending`` (the page was fine) and remember why the model call failed."""
+    bookmark.summary_error = reason[:SUMMARY_ERROR_MAX_CHARS]
     return bookmark
 
 
@@ -194,6 +205,7 @@ class _Run:
         self.today = local_date(now)
         self.daily_count = load_daily_count(settings, self.today)
         self.calls_this_run = 0
+        self.consecutive_llm_failures = 0
 
     def warn(self, message: str) -> None:
         """Record a warning in the report and the log."""
@@ -208,6 +220,7 @@ class _Run:
         try:
             result = self.llm.summarize(title=bookmark.title, url=bookmark.url, text=clipped)
         except Exception as exc:
+            self.calls_this_run += 1  # the interval still applies after a failed call
             raise _LLMCallError(f"LLM summarize failed for {bookmark.guid}: {exc}") from exc
         self.calls_this_run += 1
         self.daily_count += 1
@@ -267,11 +280,21 @@ class _Run:
                     break
                 try:
                     self.process(bookmark, http)
+                    self.consecutive_llm_failures = 0
                 except _LLMCallError as exc:
-                    rest = queue[index:]
-                    self.warn(f"{exc}; abandoning {len(rest)} remaining bookmark(s)")
-                    self.report.skipped.extend(item.guid for item in rest)
-                    break
+                    reason = str(exc)
+                    self.consecutive_llm_failures += 1
+                    self.warn(reason)
+                    self.report.llm_failed.append(bookmark.guid)
+                    modify_bookmark(Path(bookmark.path), lambda fresh: _apply_llm_failure(fresh, reason))
+                    if self.consecutive_llm_failures >= MAX_CONSECUTIVE_LLM_FAILURES:
+                        rest = queue[index + 1 :]
+                        self.warn(
+                            f"{self.consecutive_llm_failures} model failures in a row; "
+                            f"abandoning {len(rest)} remaining bookmark(s)"
+                        )
+                        self.report.skipped.extend(item.guid for item in rest)
+                        break
                 except Exception as exc:  # one bookmark must never kill the batch (§4 안정성)
                     self.warn(f"bookmark {bookmark.guid} failed unexpectedly: {exc}")
                     self.report.skipped.append(bookmark.guid)

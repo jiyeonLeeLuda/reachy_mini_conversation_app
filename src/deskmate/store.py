@@ -192,6 +192,8 @@ def bookmark_from_text(text: str, path: Path | None = None) -> Bookmark:
     bookmark.summarized_at = data.get("summarized_at")
     bookmark.fetch_attempts = int(data.get("fetch_attempts") or 0)
     bookmark.last_fetch_at = data.get("last_fetch_at")
+    raw_error = data.get("summary_error")
+    bookmark.summary_error = str(raw_error) if raw_error else None
     bookmark.body = body
     bookmark.path = path
     return bookmark

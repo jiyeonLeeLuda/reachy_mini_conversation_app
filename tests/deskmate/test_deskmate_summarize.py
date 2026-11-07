@@ -418,10 +418,40 @@ def test_rate_limit_warning_and_llm_error_isolation(repo_settings: DeskmateSetti
     first = make_bookmark(repo_settings, "first", "https://example.com/ok")
     second = make_bookmark(repo_settings, "second", "https://example.com/ok")
     report = summarize_bookmarks(repo_settings, BrokenLLM(), [first, second], now=NOW, client=client)
-    assert report.summarized == [] and report.failed == []
-    assert sorted(report.skipped) == sorted([first.guid, second.guid])
+    assert report.summarized == [] and report.failed == [] and report.skipped == []
+    assert report.llm_failed == [first.guid, second.guid]  # the run went on after the first failure
     assert any("quota exhausted" in warning for warning in report.warnings)
-    assert read_bookmark(Path(first.path)).summary_status == "pending"
+    stored = read_bookmark(Path(first.path))
+    assert stored.summary_status == "pending" and stored.summary_error is not None
+    assert "quota exhausted" in stored.summary_error and stored.fetch_attempts == 0
+
+    # A later successful run clears the error.
+    report = summarize_bookmarks(repo_settings, FakeLLM(), [first], now=NOW, client=client)
+    assert report.summarized == [first.guid]
+    assert read_bookmark(Path(first.path)).summary_error is None
+
+
+def test_consecutive_llm_failures_stop_the_run(repo_settings: DeskmateSettings, client: httpx.Client) -> None:
+    """After MAX_CONSECUTIVE_LLM_FAILURES failures in a row the rest of the queue is skipped, not attempted."""
+    from deskmate.summarize import MAX_CONSECUTIVE_LLM_FAILURES
+
+    calls: list[str] = []
+
+    class DownLLM(FakeLLM):
+        """Model that is down for good."""
+
+        def summarize(self, *, title: str, url: str, text: str) -> Any:
+            calls.append(title)
+            raise RuntimeError("503 UNAVAILABLE")
+
+    bookmarks = [
+        make_bookmark(repo_settings, f"b{index}", "https://example.com/ok")
+        for index in range(MAX_CONSECUTIVE_LLM_FAILURES + 2)
+    ]
+    report = summarize_bookmarks(repo_settings, DownLLM(), bookmarks, now=NOW, client=client)
+    assert len(calls) == MAX_CONSECUTIVE_LLM_FAILURES
+    assert len(report.llm_failed) == MAX_CONSECUTIVE_LLM_FAILURES and len(report.skipped) == 2
+    assert any("in a row" in warning for warning in report.warnings)
 
 
 def test_fetch_result_failure_shape() -> None:

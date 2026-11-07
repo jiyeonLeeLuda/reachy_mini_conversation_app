@@ -18,7 +18,7 @@ Submodules: ``render`` (the markdown template), ``builder`` (the batch).
 from __future__ import annotations
 
 from deskmate.insight.render import render_note_body
-from deskmate.insight.builder import load_insight, build_insight
+from deskmate.insight.builder import ClusterUnavailableError, load_insight, build_insight
 
 
-__all__ = ["build_insight", "load_insight", "render_note_body"]
+__all__ = ["ClusterUnavailableError", "build_insight", "load_insight", "render_note_body"]

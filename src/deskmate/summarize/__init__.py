@@ -28,6 +28,9 @@ MIN_BODY_CHARS = 200
 DAILY_MAX_SUMMARIES = 100
 CALL_INTERVAL_S = 6.0
 RETRY_BACKOFF_DAYS: tuple[int, ...] = (1, 3, 7)
+# A model failure (503, timeout) marks that bookmark ``summary_error`` and the run
+# continues; this many failures in a row mean the service is down → stop the run.
+MAX_CONSECUTIVE_LLM_FAILURES = 3
 
 
 @dataclass
@@ -36,6 +39,7 @@ class SummarizeReport:
 
     summarized: list[str] = field(default_factory=list)  # guids now ok
     failed: list[str] = field(default_factory=list)  # guids marked fetch_failed this run
+    llm_failed: list[str] = field(default_factory=list)  # fetched but the model call failed (still pending)
     skipped: list[str] = field(default_factory=list)  # already ok / excluded / backoff
     warnings: list[str] = field(default_factory=list)
 
@@ -50,6 +54,7 @@ __all__ = [
     "FETCH_MAX_BYTES",
     "FETCH_MAX_REDIRECTS",
     "FETCH_TIMEOUT_S",
+    "MAX_CONSECUTIVE_LLM_FAILURES",
     "MIN_BODY_CHARS",
     "RETRY_BACKOFF_DAYS",
     "SummarizeReport",
