@@ -1,11 +1,12 @@
 """M5 (track C): the app-side DeskMate tools wrap the package per design doc §2.2."""
 
 from __future__ import annotations
+import json
 import time
 import asyncio
 from typing import Any
 from pathlib import Path
-from datetime import date
+from datetime import date, datetime, timezone
 from unittest.mock import MagicMock
 
 import pytest
@@ -15,6 +16,7 @@ import deskmate.insight as insight_mod
 import reachy_mini_conversation_app.tools as tools_pkg
 import reachy_mini_conversation_app.tools.build_insight as build_insight_mod
 import reachy_mini_conversation_app.tools._deskmate_common as common
+from deskmate.sync import SyncReport
 from deskmate.store import note_path, read_note, read_bookmark, modify_bookmark
 from deskmate.models import Bookmark, InsightNote
 from deskmate.periods import Period
@@ -44,11 +46,19 @@ def _deps() -> ToolDependencies:
 
 @pytest.fixture(autouse=True)
 def _fixed_today_and_clean_session(monkeypatch: pytest.MonkeyPatch) -> Any:
-    """Pin ``today`` to the fixture week and make sure no session leaks between tests."""
+    """Pin ``today``, keep sessions from leaking, and hold the read-tools' Chrome sync throttle.
+
+    The read tools sync Chrome before reading (§2.4). The fixture Chrome data holds
+    more bookmarks than the sample repo, so an unthrottled sync would make every
+    "ready" expectation stale; tests that want the sync call ``reset_sync_throttle``.
+    """
     monkeypatch.setattr(common, "_today", lambda: TODAY)
-    SESSION_MANAGER.close()
+    SESSION_MANAGER.reset()
+    common.reset_sync_throttle()
+    common._LAST_SYNC_AT["Default"] = time.monotonic()
     yield
-    SESSION_MANAGER.close()
+    SESSION_MANAGER.reset()
+    common.reset_sync_throttle()
 
 
 @pytest.fixture
@@ -430,7 +440,13 @@ async def test_finish_insight_appends_conversation_and_closes(env: Path) -> None
     assert "ICE restart 2단계 전략을 먼저 써 보기로 했다." in after.conversations[-1]
     assert after.clusters == before.clusters  # front matter untouched
 
-    assert (await FinishInsight()(_deps(), conclusion="again"))["error"] == "no open insight session"
+    # Safety net: a premature explicit finish followed by the real one (2026-11-07 live test) must
+    # not lose the real conclusion → recorded in the same note once; a third call is an error.
+    again = await FinishInsight()(_deps(), conclusion="진짜 결론은 이거다.")
+    assert again["ok"] is True and again["reopened_last"] is True and again["note_path"] == str(path)
+    third, _ = read_note(path)
+    assert len(third.conversations) == 3 and "진짜 결론은 이거다." in third.conversations[-1]
+    assert (await FinishInsight()(_deps(), conclusion="third time"))["error"] == "no open insight session"
 
 
 @pytest.mark.asyncio
@@ -443,6 +459,151 @@ async def test_finish_insight_rejects_auto_and_bad_reasons(env: Path) -> None:
     assert "reason" in (await FinishInsight()(_deps(), conclusion="x", reason="bored"))["error"]
     assert "conclusion" in (await FinishInsight()(_deps(), conclusion="  "))["error"]
     assert SESSION_MANAGER.current() is not None  # invalid calls do not close the session
+
+
+# --- sync before read (a bookmark saved a second ago must be visible) ------------------------
+
+NEW_ID = "c0ffee00-0000-4000-8000-000000000099"
+WEBKIT_EPOCH_OFFSET_US = 11_644_473_600 * 1_000_000
+
+
+def _add_chrome_bookmark(chrome: Path, title: str, url: str, guid: str, when: datetime) -> None:
+    path = chrome / "Default" / "Bookmarks"
+    data = json.loads(path.read_text(encoding="utf-8"))
+    data["roots"]["bookmark_bar"]["children"].append(
+        {
+            "type": "url",
+            "name": title,
+            "url": url,
+            "guid": guid,
+            "id": "999",
+            "date_added": str(int(when.timestamp() * 1_000_000) + WEBKIT_EPOCH_OFFSET_US),
+        }
+    )
+    path.write_text(json.dumps(data, ensure_ascii=False), encoding="utf-8")
+
+
+@pytest.mark.asyncio
+async def test_read_tools_sync_chrome_before_reading(env: Path, chrome_user_data: Path) -> None:
+    """A bookmark just saved in Chrome shows up in list_bookmarks and makes get_insight regenerate."""
+    _add_chrome_bookmark(
+        chrome_user_data,
+        "오늘 저장한 글",
+        "https://example.com/just-now",
+        NEW_ID,
+        datetime(2026, 11, 6, 9, tzinfo=timezone.utc),
+    )
+    common.reset_sync_throttle()
+    listed = await ListBookmarks()(_deps(), days=7)
+    assert NEW_ID in {item["id"] for item in listed["bookmarks"]}
+
+    common.reset_sync_throttle()
+    result = await GetInsight()(_deps(), days=7)
+    assert result["status"] == "generating"  # the note no longer covers the period
+    assert SESSION_MANAGER.current() is None
+
+
+@pytest.mark.asyncio
+async def test_sync_before_read_is_throttled(env: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Two reads within SYNC_MIN_INTERVAL_S sync Chrome once."""
+    calls: list[list[str] | None] = []
+
+    def _record(settings: DeskmateSettings, *, profiles: list[str] | None = None, **_: Any) -> SyncReport:
+        calls.append(profiles)
+        return SyncReport()
+
+    monkeypatch.setattr(sync_mod, "sync_profiles", _record)
+    common.reset_sync_throttle()
+    await ListBookmarks()(_deps(), days=7)
+    await GetInsight()(_deps(), days=7)
+    assert calls == [["Default"]]
+
+
+@pytest.mark.asyncio
+async def test_sync_failure_does_not_break_read_tools(env: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Chrome unreadable → warning in the result, the tools still answer from the repository."""
+
+    def _crash(*_: Any, **__: Any) -> SyncReport:
+        raise OSError("chrome locked")
+
+    monkeypatch.setattr(sync_mod, "sync_profiles", _crash)
+    common.reset_sync_throttle()
+    result = await GetInsight()(_deps(), days=7)
+    assert result["status"] == "ready" and "chrome locked" in result["sync_warning"]
+    common.reset_sync_throttle()
+    assert (await ListBookmarks()(_deps(), days=7))["count"] == 3
+
+
+# --- finish_insight safety net after an app-side close ---------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_finish_insight_after_auto_close_records_in_last_note(env: Path) -> None:
+    """The app closed the session (idle / sleep) but the model still finishes → conclusion lands in that note."""
+    opened = await GetInsight()(_deps(), days=7)
+    path = Path(opened["note_path"])
+    assert SESSION_MANAGER.auto_finish("슬립 전환") is not None
+
+    result = await FinishInsight()(_deps(), conclusion="늦게 남긴 결론", reason="explicit")
+
+    assert result["ok"] is True and result["reopened_last"] is True and result["note_path"] == str(path)
+    after, _ = read_note(path)
+    assert "늦게 남긴 결론" in after.conversations[-1] and "자동 종료" in after.conversations[-2]
+    # the net is consumed: a further call without a new get_insight is an error
+    assert (await FinishInsight()(_deps(), conclusion="again"))["error"] == "no open insight session"
+
+
+# --- build_insight when the batch model is down ----------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_build_insight_degraded_note_is_ready_with_pending_titles(
+    env: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A degraded (previous) note is served as ready with the uncovered titles and a session."""
+
+    def _degraded(settings: DeskmateSettings, llm: Any, profile: str, period: Period, **_: Any) -> InsightNote:
+        note = _fixture_note(settings, profile, period)
+        note.degraded = True
+        note.pending_titles = ["새 글"]
+        return note
+
+    monkeypatch.setattr(insight_mod, "build_insight", _degraded)
+    result = await BuildInsight()(_deps(), since="2026-10-31", until="2026-11-06")
+    assert result["status"] == "ready" and result["degraded"] is True and result["pending_titles"] == ["새 글"]
+    assert "지난번 정리" in result["next_action"] and "1건" in result["next_action"]
+    assert SESSION_MANAGER.current() is not None
+
+
+@pytest.mark.asyncio
+async def test_build_insight_model_outage_error_has_friendly_next_action(
+    env: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """No previous note + model down → error with the apologetic next_action; a plain bug has none."""
+
+    def _down(*_: Any, **__: Any) -> InsightNote:
+        raise insight_mod.ClusterUnavailableError("cluster model unavailable: 503 UNAVAILABLE")
+
+    monkeypatch.setattr(insight_mod, "build_insight", _down)
+    result = await BuildInsight()(_deps(), days=7)
+    assert "503" in result["error"] and "바빠서" in result["next_action"]
+
+    def _bug(*_: Any, **__: Any) -> InsightNote:
+        raise KeyError("clusters")
+
+    monkeypatch.setattr(insight_mod, "build_insight", _bug)
+    assert "next_action" not in await BuildInsight()(_deps(), days=7)
+
+
+@pytest.mark.asyncio
+async def test_build_insight_plays_progress_signal(env: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """The working signal wraps the pipeline: start chime before, done chime after."""
+    monkeypatch.setattr(insight_mod, "build_insight", _fake_build)
+    deps = _deps()
+    deps.reachy_mini.media.get_output_audio_samplerate.return_value = 16000
+    result = await BuildInsight()(deps, since="2026-10-31", until="2026-11-06")
+    assert result["status"] == "ready"
+    assert deps.reachy_mini.media.push_audio_sample.call_count == 2
 
 
 # --- discovery / schema ---------------------------------------------------------------------

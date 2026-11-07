@@ -61,9 +61,11 @@ def e2e_env(empty_repo: Path, chrome_user_data: Path, monkeypatch: pytest.Monkey
     monkeypatch.setattr(
         fetch_mod, "build_client", lambda transport=None: httpx.Client(transport=httpx.MockTransport(_handler))
     )
-    SESSION_MANAGER.close()
+    SESSION_MANAGER.reset()
+    common.reset_sync_throttle()
     yield empty_repo
-    SESSION_MANAGER.close()
+    SESSION_MANAGER.reset()
+    common.reset_sync_throttle()
 
 
 @pytest.mark.asyncio
@@ -73,8 +75,10 @@ async def test_full_pipeline_through_the_tools(e2e_env: Path) -> None:
     kwargs: dict[str, Any] = {"since": "2026-10-31", "until": "2026-11-06"}
 
     first = await GetInsight()(deps, **kwargs)
-    # The repo is empty before the first build: no bookmarks yet → empty is the honest answer.
-    assert first["status"] == "empty"
+    # The repo is empty, but get_insight syncs Chrome first: the fixture bookmarks are now
+    # in the repo and there is no note yet → generating (bookmark_count = 3 in the period).
+    assert first["status"] == "generating" and first["bookmark_count"] == 3
+    assert "sync_warning" not in first
 
     built = await BuildInsight()(deps, **kwargs)
     assert built.get("error") is None, built

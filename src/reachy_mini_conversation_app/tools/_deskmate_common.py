@@ -15,6 +15,7 @@ from typing import Any
 from datetime import date
 from dataclasses import dataclass
 
+import deskmate.sync as sync_mod
 from deskmate.store import list_profiles
 from deskmate.models import InsightNote
 from deskmate.periods import Period, PeriodError, resolve_period
@@ -30,6 +31,7 @@ __all__ = ["now_local_label"]  # re-exported from deskmate.session for the tools
 FALLBACK_PROFILE = "Default"
 DEFAULT_DAYS = 7
 DEFAULT_PERIOD_LABEL = "지난 일주일"
+SYNC_MIN_INTERVAL_S = 30.0  # read-tools re-sync Chrome at most this often per profile (0.1 s for 360 bookmarks)
 
 # --- next_action texts (§3.1 / §3.2, tuned per profile prompt later) ----------
 NOT_CONFIGURED_NEXT_ACTION = "사용자에게 북마크 저장소가 설정되지 않았다고 짧게 말하라"
@@ -39,8 +41,9 @@ READY_NEXT_ACTION = (
     "말하지 마라. 한 번의 발화에 묶음 하나와 질문 하나만 꺼내고, 사용자가 반응한 뒤에 다음 묶음으로 "
     "넘어가라. 읽었는지·몇 개 모았는지·얼마나 묵혔는지 평가하지 말고, 왜 저장했는지도 묻지 마라. "
     "상관관계를 말할 때는 어느 북마크끼리인지 짧게 줄인 제목으로 짚고 긴 제목을 그대로 읽지 마라. "
-    "unavailable에 있는 북마크는 '제목만 보고 하는 얘긴데'라고 밝혀라. 첫 묶음의 summary와 "
-    "correlation을 한두 문장으로 말하고, 발화는 반드시 그 묶음의 question으로 끝내라."
+    "unavailable에 있는 북마크는 '제목만 보고 하는 얘긴데'라고 밝혀라. 첫 발화는 짧은 문장 최대 두 개와 "
+    "질문 하나로 끝낸다: 첫 묶음의 summary와 correlation을 한 문장씩 줄여 말하고, 반드시 그 묶음의 "
+    "question으로 끝내라. 한국어로만 말한다."
 )
 
 
@@ -57,6 +60,38 @@ def today_iso() -> str:
 def elapsed_ms(started: float) -> float:
     """Milliseconds since ``started`` (a ``time.perf_counter()`` value)."""
     return (time.perf_counter() - started) * 1000.0
+
+
+# --- Chrome sync before reading (a bookmark saved a second ago must be visible) ----------
+
+_LAST_SYNC_AT: dict[str, float] = {}  # profile → time.monotonic() of the last sync by a read tool
+
+
+def reset_sync_throttle() -> None:
+    """Forget the last sync times (tests)."""
+    _LAST_SYNC_AT.clear()
+
+
+def sync_before_read(settings: DeskmateSettings, profile: str) -> str | None:
+    """Mirror Chrome into the repo for ``profile`` unless it was done within ``SYNC_MIN_INTERVAL_S``.
+
+    Returns a short warning string (or ``None``); never raises, the tools still
+    answer from whatever the repository holds.
+    """
+    now = time.monotonic()
+    last = _LAST_SYNC_AT.get(profile)
+    if last is not None and now - last < SYNC_MIN_INTERVAL_S:
+        return None
+    _LAST_SYNC_AT[profile] = now
+    try:
+        report = sync_mod.sync_profiles(settings, profiles=[profile])
+    except Exception as exc:
+        logger.warning("sync before read failed for %s (continuing with the repository): %s", profile, exc)
+        return f"sync failed: {type(exc).__name__}: {exc}"
+    warnings = [str(item) for item in (getattr(report, "warnings", None) or [])]
+    if warnings:
+        logger.warning("sync before read (%s): %s", profile, "; ".join(warnings))
+    return "; ".join(warnings) or None
 
 
 # --- settings / profile ------------------------------------------------------------

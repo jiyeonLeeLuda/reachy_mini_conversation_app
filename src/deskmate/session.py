@@ -58,6 +58,7 @@ class InsightSessionManager:
         """Start with no open session."""
         self._lock = threading.Lock()
         self._session: InsightSession | None = None
+        self._last_closed: InsightSession | None = None
 
     def open(self, profile: str, note_path: Path) -> InsightSession:
         """Start a session, implicitly closing any previous one."""
@@ -77,9 +78,34 @@ class InsightSessionManager:
                 self._session.last_activity = time.monotonic()
 
     def close(self) -> InsightSession | None:
-        """Close and return the session (caller writes the note section)."""
+        """Close and return the session (caller writes the note section).
+
+        The closed session is kept as ``last_closed`` whatever closed it, so a
+        later ``finish_insight`` without an open session (premature explicit
+        finish, app-side idle/sleep close) can still record its conclusion
+        there once (``take_last_closed``).
+        """
         with self._lock:
             session, self._session = self._session, None
+            if session is not None:
+                self._last_closed = session
+            return session
+
+    def reset(self) -> None:
+        """Drop the open session and the last-closed memory (tests, app restart)."""
+        with self._lock:
+            self._session = None
+            self._last_closed = None
+
+    def last_closed(self) -> InsightSession | None:
+        """Return the most recently closed session (a late ``finish_insight`` can still find its note)."""
+        with self._lock:
+            return self._last_closed
+
+    def take_last_closed(self) -> InsightSession | None:
+        """Return and forget the last closed session (the safety net is used once)."""
+        with self._lock:
+            session, self._last_closed = self._last_closed, None
             return session
 
     def idle_seconds(self) -> float | None:
@@ -96,6 +122,7 @@ class InsightSessionManager:
             if session is None or time.monotonic() - session.last_activity < timeout_s:
                 return None
             self._session = None
+            self._last_closed = session
             return session
 
     def auto_finish(self, trigger: str, *, idle_timeout_s: float | None = None) -> InsightSession | None:

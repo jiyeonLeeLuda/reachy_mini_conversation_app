@@ -4,6 +4,7 @@ from __future__ import annotations
 import time
 import logging
 from typing import Any, ClassVar
+from pathlib import Path
 
 from deskmate.store import append_conversation_section
 from deskmate.session import SESSION_MANAGER
@@ -70,11 +71,29 @@ class FinishInsight(Tool):
             return {"error": f"reason must be one of {', '.join(ALLOWED_REASONS)}, got {reason!r}"}
         if not conclusion:
             return {"error": "conclusion is required"}
-        if SESSION_MANAGER.current() is None:
-            return {"error": "no open insight session", "next_action": NO_SESSION_NEXT_ACTION}
         session = SESSION_MANAGER.close()
-        if session is None:  # closed concurrently by the app-side state machine
-            return {"error": "no open insight session", "next_action": NO_SESSION_NEXT_ACTION}
+        reopened_last = False
+        if session is None:
+            # Safety net (§3.3): the session was already closed — by the app (idle / sleep /
+            # shutdown) or by a premature explicit finish — but the model finishes again with the
+            # real conclusion. It belongs to the last note, so record it there once (consumed).
+            last = SESSION_MANAGER.take_last_closed()
+            if last is None or not Path(last.note_path).is_file():
+                return {"error": "no open insight session", "next_action": NO_SESSION_NEXT_ACTION}
+            session, reopened_last = last, True
         append_conversation_section(session.note_path, now_local_label(), conclusion)
-        logger.info("finish_insight: recorded conclusion (%s) in %s", reason, session.note_path)
-        return {"ok": True, "note_path": str(session.note_path), "reason": reason, "next_action": FINISH_NEXT_ACTION}
+        logger.info(
+            "finish_insight: recorded conclusion (%s%s) in %s",
+            reason,
+            ", last closed session" if reopened_last else "",
+            session.note_path,
+        )
+        result: dict[str, Any] = {
+            "ok": True,
+            "note_path": str(session.note_path),
+            "reason": reason,
+            "next_action": FINISH_NEXT_ACTION,
+        }
+        if reopened_last:
+            result["reopened_last"] = True
+        return result

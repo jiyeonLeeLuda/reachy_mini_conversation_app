@@ -14,6 +14,7 @@ from reachy_mini_conversation_app.tools._deskmate_common import (
     elapsed_ms,
     profile_hint,
     prepare_context,
+    sync_before_read,
 )
 
 
@@ -76,6 +77,7 @@ class ListBookmarks(Tool):
             return {"error": f"limit must be an integer, got {raw_limit!r}"}
         limit = max(1, min(MAX_LIMIT, limit))
 
+        sync_before_read(ctx.settings, ctx.profile)
         bookmarks = bookmarks_in_period(ctx.settings, ctx.profile, ctx.period)[:limit]
         return {
             "today": today_iso(),

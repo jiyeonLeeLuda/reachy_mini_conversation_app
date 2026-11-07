@@ -67,3 +67,24 @@ def test_auto_finish_survives_missing_note(tmp_path: Path) -> None:
     assert manager.auto_finish(TRIGGER_SLEEP) is not None
     assert manager.current() is None
     assert not (tmp_path / "missing.md").exists()
+
+
+def test_last_closed_remembers_every_close_and_is_consumed_once(repo: Path) -> None:
+    """auto_finish and explicit close both leave the session in ``last_closed``; take_last_closed uses it once."""
+    manager = InsightSessionManager()
+    note = _note(repo)
+    assert manager.last_closed() is None
+    first = manager.open("Default", note)
+    assert manager.auto_finish(TRIGGER_SLEEP) is first
+    assert manager.last_closed() is first and manager.current() is None
+    second = manager.open("Default", note)
+    second.last_activity -= 100
+    assert manager.auto_finish(TRIGGER_SLEEP, idle_timeout_s=60) is second
+    assert manager.last_closed() is second
+    third = manager.open("Default", note)
+    assert manager.close() is third and manager.last_closed() is third  # explicit finish remembered too
+    assert manager.close() is None and manager.last_closed() is third  # no session open: memory kept
+    assert manager.take_last_closed() is third and manager.last_closed() is None  # used once
+    manager.open("Default", note)
+    manager.reset()
+    assert manager.current() is None and manager.last_closed() is None

@@ -18,6 +18,7 @@ from deskmate.llm import build_llm
 from deskmate.periods import Period
 from deskmate.settings import DeskmateSettings
 from reachy_mini_conversation_app.tools.core_tools import Tool, ToolDependencies
+from reachy_mini_conversation_app.deskmate_progress import working_signal
 from reachy_mini_conversation_app.tools.get_insight import PERIOD_PROPERTIES
 from reachy_mini_conversation_app.tools._deskmate_common import (
     ToolContext,
@@ -33,9 +34,19 @@ logger = logging.getLogger(__name__)
 
 BUILT_NEXT_ACTION = (
     "인사이트 생성이 끝났다. 묶음 하나와 질문 하나로 시작하라: 첫 묶음의 summary와 correlation을 짧게 줄인 "
-    "제목으로 근거를 짚어 한두 문장으로 말하고, 발화는 반드시 그 묶음의 question으로 끝내라. 나머지 묶음은 "
-    "사용자가 반응한 뒤 하나씩 꺼내라. unavailable에 있는 북마크는 '제목만 보고 하는 얘긴데'라고만 밝히고, "
-    "읽었는지·개수·묵힌 기간으로 평가하지 마라. 노트에 없는 내용은 말하지 마라."
+    "제목으로 근거를 짚어 짧은 문장 최대 두 개로 말하고, 발화는 반드시 그 묶음의 question으로 끝내라. 나머지 "
+    "묶음은 사용자가 반응한 뒤 하나씩 꺼내라. unavailable에 있는 북마크는 '제목만 보고 하는 얘긴데'라고만 "
+    "밝히고, 읽었는지·개수·묵힌 기간으로 평가하지 마라. 노트에 없는 내용은 말하지 마라. 한국어로만 말한다."
+)
+DEGRADED_NEXT_ACTION = (
+    "요약 서비스가 바빠서 새 인사이트를 못 만들었다. 대신 이전에 만든 인사이트(이 결과의 clusters)로 이야기한다. "
+    "먼저 '요약 서비스가 바빠서 지난번 정리로 얘기할게'라고 한 문장으로 알리고, pending_titles에 있는 북마크 "
+    "{count}건은 아직 못 봤다고 짧게 줄인 제목으로 말한 뒤, 첫 묶음의 요약 한 문장과 question으로 끝내라. "
+    "한국어로만 말한다."
+)
+BUSY_NEXT_ACTION = (
+    "요약 서비스가 바빠서 지금은 북마크를 못 봤다고 한 문장으로 짧게 사과하고, 조금 뒤에 다시 하자고 말하라. "
+    "다른 설명은 덧붙이지 마라."
 )
 
 
@@ -69,12 +80,25 @@ class BuildInsight(Tool):
             return ctx
         try:
             # CancelledError (task_cancel) is not an Exception subclass: it propagates.
-            result = await asyncio.to_thread(_run_pipeline, ctx)
+            async with working_signal(deps):
+                result = await asyncio.to_thread(_run_pipeline, ctx)
         except Exception as exc:
             logger.exception("build_insight failed")
             result = {"error": f"{type(exc).__name__}: {exc}", "profile": ctx.profile}
+            if _looks_like_model_outage(exc):
+                result["next_action"] = BUSY_NEXT_ACTION
         logger.info("build_insight done in %.0f ms: status=%s", elapsed_ms(started), result.get("status", "error"))
         return result
+
+
+def _looks_like_model_outage(exc: BaseException) -> bool:
+    """Whether the failure is the batch model being busy/unreachable (vs. a bug) → friendlier wording."""
+    if isinstance(exc, insight_mod.ClusterUnavailableError):
+        return True
+    text = str(exc).lower()
+    return any(
+        marker in text for marker in ("503", "unavailable", "timeout", "timed out", "429", "resource_exhausted")
+    )
 
 
 def _sync(settings: DeskmateSettings, profile: str) -> str | None:
@@ -102,6 +126,11 @@ def _run_pipeline(ctx: ToolContext) -> dict[str, Any]:
     note = _build(ctx.settings, ctx.profile, ctx.period)
     if note is None or getattr(note, "path", None) is None:
         result = empty_result(ctx)
+    elif getattr(note, "degraded", False):
+        pending = list(getattr(note, "pending_titles", []) or [])
+        result = ready_result(note, ctx.profile, DEGRADED_NEXT_ACTION.format(count=len(pending)))
+        result["degraded"] = True
+        result["pending_titles"] = pending
     else:
         result = ready_result(note, ctx.profile, BUILT_NEXT_ACTION)
     if warning:

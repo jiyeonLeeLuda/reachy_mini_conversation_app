@@ -21,6 +21,7 @@ from reachy_mini_conversation_app.tools._deskmate_common import (
     profile_hint,
     ready_result,
     prepare_context,
+    sync_before_read,
 )
 
 
@@ -74,7 +75,13 @@ class GetInsight(Tool):
         if not isinstance(ctx, ToolContext):
             return ctx
 
-        bookmarks = bookmarks_in_period(ctx.settings, ctx.profile, ctx.period)
+        sync_warning = sync_before_read(ctx.settings, ctx.profile)
+        result = self._read(ctx, bookmarks_in_period(ctx.settings, ctx.profile, ctx.period))
+        if sync_warning:
+            result["sync_warning"] = sync_warning
+        return result
+
+    def _read(self, ctx: ToolContext, bookmarks: list[Any]) -> dict[str, Any]:
         if not bookmarks:
             return empty_result(ctx)
 
@@ -96,7 +103,8 @@ class GetInsight(Tool):
             "period": ctx.period.to_dict(),
             "bookmark_count": len(bookmarks),
             "next_action": (
-                "이 기간의 인사이트 노트가 아직 없거나 낡았다. 사용자에게 '잠깐 훑어볼게' 정도로 짧게 한마디만 "
-                f"하고, 곧바로 {call}를 호출하라. 그 결과가 돌아오면 그때 묶음 하나와 질문 하나로 이야기를 시작한다."
+                "이 기간의 인사이트 노트가 아직 없거나 낡았다. 먼저 반드시 사용자에게 '잠깐 훑어볼게' 한마디를 "
+                f"소리 내어 말한 다음에 {call}를 호출하라. 도구가 도는 동안 사용자가 말을 걸면 한국어로 짧게 "
+                "'아직 훑는 중이야'라고 답하라. 결과가 돌아오면 그때 묶음 하나와 질문 하나로 이야기를 시작한다."
             ),
         }
