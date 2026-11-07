@@ -107,19 +107,25 @@ def _process_lock(repo: Path) -> threading.RLock:
 
 
 @contextmanager
-def repo_lock(settings: DeskmateSettings, timeout_s: float = LOCK_TIMEOUT_S) -> Iterator[None]:
+def repo_lock(
+    settings: DeskmateSettings, timeout_s: float = LOCK_TIMEOUT_S, process_timeout_s: float | None = None
+) -> Iterator[None]:
     """Serialize writers on one repository (in-process RLock + cross-process lock file).
 
     Re-entrant: a caller that already holds the lock (same thread) can nest
     ``repo_lock`` freely; only the outermost level touches the lock file, so a
     batch can wrap sync + summarize + insight in one critical section.
+    ``timeout_s`` bounds the wait for another *process*; ``process_timeout_s``
+    (default: wait forever) bounds the wait for another *thread* of this
+    process, so an interactive caller can give up fast with ``TimeoutError``.
     """
     repo = settings.require_repo()
     key = str(repo.resolve())
     lock_path = settings.state_dir / LOCK_FILENAME
     lock_path.parent.mkdir(parents=True, exist_ok=True)
     plock = _process_lock(repo)
-    plock.acquire()
+    if not plock.acquire(timeout=-1 if process_timeout_s is None else process_timeout_s):
+        raise TimeoutError(f"deskmate repository is busy in another thread of this process: {repo}")
     try:
         if _LOCK_DEPTH.get(key, 0) > 0:
             _LOCK_DEPTH[key] += 1

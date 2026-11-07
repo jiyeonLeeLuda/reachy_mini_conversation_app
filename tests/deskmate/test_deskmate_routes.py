@@ -1,9 +1,11 @@
 """Tests for the ``deskmate.*`` settings-UI methods (M10 setup dashboard)."""
 
 import os
+import sys
 import json
 import time
 import inspect
+import threading
 from types import SimpleNamespace
 from typing import Any
 from pathlib import Path
@@ -16,7 +18,7 @@ from fastapi.testclient import TestClient
 from reachy_mini.apps.jsonrpc_server import JsonRpcServer
 import reachy_mini_conversation_app.deskmate_routes as routes_mod
 from deskmate import demo as demo_mod
-from deskmate.store import LOCK_FILENAME
+from deskmate.store import LOCK_FILENAME, repo_lock
 from deskmate.settings import (
     ENV_BOOKMARK_REPO,
     ENV_CHROME_PROFILES,
@@ -291,6 +293,43 @@ def test_sync_repo_locked(
     assert lock_path.exists()
 
 
+def test_sync_repo_held_by_another_thread(
+    settings: DeskmateSettings, env_writer: FakeEnvWriter, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The voice batch holding repo_lock in another thread yields deskmate_repo_locked quickly, not a hang."""
+    monkeypatch.setattr(routes_mod, "SYNC_RLOCK_WAIT_S", 0.2)
+    held = threading.Event()
+    release = threading.Event()
+
+    def hold() -> None:
+        with repo_lock(settings):
+            held.set()
+            release.wait(5.0)
+
+    holder = threading.Thread(target=hold, daemon=True)
+    holder.start()
+    assert held.wait(5.0)
+    try:
+        client = _mount(_ops_for(settings, env_writer))
+        started = time.monotonic()
+        assert _reason(client, "deskmate.sync") == "deskmate_repo_locked"
+        assert time.monotonic() - started < 1.5
+        assert _result(client, "deskmate.status")["sync_running"] is False
+    finally:
+        release.set()
+        holder.join(5.0)
+
+
+def test_sync_ignores_path_overrides(
+    settings: DeskmateSettings, chrome_user_data: Path, env_writer: FakeEnvWriter
+) -> None:
+    """``repo`` / ``chrome_dir`` params are not accepted: paths always come from validated settings."""
+    client = _mount(_ops_for(settings, env_writer))
+    result = _result(client, "deskmate.sync", {"repo": str(chrome_user_data / "Default")})
+    assert result["profiles"] == ["Default"]
+    assert not (chrome_user_data / "Default" / ".deskmate").exists()
+
+
 # --- repo.set ----------------------------------------------------------------------
 
 
@@ -363,6 +402,35 @@ def test_repo_set_rejections(
     assert env_writer.calls == []
     assert sorted(path.name for path in (chrome_user_data / "Default").iterdir()) == chrome_entries_before
     assert not (tmp_path / "a").exists() and not (tmp_path / "bookmarks").exists()
+
+
+def test_repo_set_rejects_existing_file(tmp_path: Path, env_writer: FakeEnvWriter) -> None:
+    """A path that is an existing file is refused as invalid (not reported as "not writable" or "missing")."""
+    file_path = tmp_path / "notes.md"
+    file_path.write_text("x", encoding="utf-8")
+    client = _mount(DeskmateOps(persist_env=env_writer, load_settings_fn=load_settings))
+    assert (
+        _reason(client, "deskmate.repo.set", {"path": str(file_path), "create": False}) == "deskmate_repo_path_invalid"
+    )
+    assert (
+        _reason(client, "deskmate.repo.set", {"path": str(file_path), "create": True}) == "deskmate_repo_path_invalid"
+    )
+    assert env_writer.calls == []
+
+
+@pytest.mark.skipif(sys.platform != "darwin", reason="case-insensitive default filesystem (APFS)")
+def test_repo_path_inside_chrome_case_insensitive(tmp_path: Path, chrome_user_data: Path) -> None:
+    """A case variant of the Chrome directory is still "inside Chrome" on a case-insensitive filesystem."""
+    variant = chrome_user_data.parent / chrome_user_data.name.swapcase() / "Default"
+    with pytest.raises(DeskmateRouteError) as excinfo:
+        validate_repo_path(str(variant), chrome_root=chrome_user_data)
+    assert excinfo.value.reason == "deskmate_repo_inside_chrome"
+    # Fallback (Chrome dir does not exist yet): string comparison is case-folded too.
+    missing_root = tmp_path / "Chrome"
+    with pytest.raises(DeskmateRouteError) as excinfo:
+        validate_repo_path(str(tmp_path / "chrome" / "Default"), chrome_root=missing_root)
+    assert excinfo.value.reason == "deskmate_repo_inside_chrome"
+    assert validate_repo_path(str(tmp_path / "chrome-vault"), chrome_root=missing_root) == tmp_path / "chrome-vault"
 
 
 def test_validate_repo_path_normalizes(tmp_path: Path, chrome_user_data: Path) -> None:

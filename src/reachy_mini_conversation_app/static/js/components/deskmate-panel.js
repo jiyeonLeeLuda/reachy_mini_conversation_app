@@ -359,6 +359,8 @@ export function buildDeskmateSection({ signal } = {}) {
       if (aborted()) return;
       if (error?.body?.error === "deskmate_chrome_dir_not_found") chromeDetails.open = true;
       setStatus(describeDeskmateError(error), { error: true });
+      // A timed-out sync may still be running server-side: re-read the status so the "진행 중" row shows.
+      if (error?.body?.error === "timeout") await refresh();
     } finally {
       if (!aborted()) setBusy(null);
     }

@@ -11,6 +11,7 @@ console already uses for other settings.
 
 from __future__ import annotations
 import os
+import sys
 import json
 import time
 import asyncio
@@ -20,7 +21,6 @@ import threading
 from typing import Any
 from pathlib import Path
 from datetime import datetime, timezone
-from dataclasses import replace
 from collections.abc import Callable, Awaitable
 
 from reachy_mini.io.jsonrpc import JsonRpcError
@@ -43,6 +43,7 @@ logger = logging.getLogger(__name__)
 
 # --- tuning constants ---------------------------------------------------------
 SYNC_LOCK_TIMEOUT_S = 60.0  # wait this long for repo_lock held by another process before deskmate_repo_locked
+SYNC_RLOCK_WAIT_S = 2.0  # wait this long for repo_lock held by another thread (voice batch) so the UI answers fast
 DEMO_DEFAULT_DIRNAME = "deskmate-demo"  # default demo target under the home directory
 LAST_SYNC_FILENAME = "last_sync.json"  # written under <repo>/.deskmate/ after a UI sync
 SUGGESTED_REPO_PARTS: tuple[str, ...] = ("Documents", "bookmarks")  # default repo under the home directory
@@ -91,8 +92,7 @@ def validate_repo_path(raw: str, *, chrome_root: Path) -> Path:
         raise DeskmateRouteError("deskmate_repo_path_relative", f"Enter an absolute path: {text}")
     normalized = Path(os.path.normpath(str(path)))
     resolved = normalized.resolve()
-    chrome_resolved = chrome_root.expanduser().resolve()
-    if resolved == chrome_resolved or resolved.is_relative_to(chrome_resolved):
+    if _is_inside(resolved, chrome_root.expanduser().resolve()):
         raise DeskmateRouteError(
             "deskmate_repo_inside_chrome",
             f"The repository must not be inside the Chrome user data directory ({chrome_root}).",
@@ -103,7 +103,36 @@ def validate_repo_path(raw: str, *, chrome_root: Path) -> Path:
             "deskmate_repo_path_reserved",
             f"Choose a folder of its own, not the home directory or a drive root: {normalized}",
         )
+    if normalized.exists() and not normalized.is_dir():
+        raise DeskmateRouteError("deskmate_repo_path_invalid", f"Not a folder: {normalized}")
     return normalized
+
+
+def _is_inside(path: Path, root: Path) -> bool:
+    """Return whether ``path`` is ``root`` or below it, tolerant of case-insensitive filesystems (APFS, NTFS).
+
+    When ``root`` exists, ``path`` and its existing parents are compared by
+    inode (``os.path.samestat``), which sees through case variants and
+    symlinks. Otherwise the strings are compared, case-folded on macOS/Windows.
+    """
+    if path == root or path.is_relative_to(root):
+        return True
+    try:
+        root_stat = root.stat()
+    except OSError:
+        root_stat = None
+    if root_stat is not None:
+        for candidate in (path, *path.parents):
+            try:
+                if os.path.samestat(candidate.stat(), root_stat):
+                    return True
+            except OSError:
+                continue
+        return False
+    left, right = str(path), str(root)
+    if sys.platform == "darwin" or os.name == "nt":
+        left, right = os.path.normcase(left).lower(), os.path.normcase(right).lower()
+    return left == right or left.startswith(right.rstrip(os.sep) + os.sep)
 
 
 def _probe_writable(path: Path) -> None:
@@ -270,18 +299,14 @@ class DeskmateOps:
 
     # -- sync ---------------------------------------------------------------
 
-    def sync(
-        self,
-        profiles: list[str] | None = None,
-        repo: str | None = None,
-        chrome_dir: str | None = None,
-    ) -> dict[str, object]:
-        """Mirror the allowed Chrome profiles once and return the per-profile counts (``SyncReport`` as JSON)."""
+    def sync(self, profiles: list[str] | None = None) -> dict[str, object]:
+        """Mirror the allowed Chrome profiles once and return the per-profile counts (``SyncReport`` as JSON).
+
+        Repository and Chrome paths always come from the saved settings
+        (``deskmate.repo.set`` / ``deskmate.env.apply`` validated them); a
+        per-call override would bypass ``validate_repo_path``.
+        """
         settings = self._load_settings()
-        if repo:
-            settings = replace(settings, bookmark_repo=Path(repo).expanduser())
-        if chrome_dir:
-            settings = replace(settings, chrome_user_data_dir=Path(chrome_dir).expanduser())
         if not settings.configured:
             raise DeskmateRouteError("deskmate_not_configured", f"{ENV_BOOKMARK_REPO} is not set")
         if not self._sync_guard.acquire(blocking=False):
@@ -290,7 +315,9 @@ class DeskmateOps:
             started_at = _utc_now_iso()
             clock = time.monotonic()
             try:
-                with repo_lock(settings, timeout_s=SYNC_LOCK_TIMEOUT_S):
+                # Outer lock: bounded waits for both another thread (voice batch, SYNC_RLOCK_WAIT_S) and another
+                # process (lock file, SYNC_LOCK_TIMEOUT_S); sync_profiles re-enters it per profile.
+                with repo_lock(settings, timeout_s=SYNC_LOCK_TIMEOUT_S, process_timeout_s=SYNC_RLOCK_WAIT_S):
                     report = sync_profiles(settings, profiles=profiles)
             except TimeoutError as exc:
                 raise DeskmateRouteError("deskmate_repo_locked", str(exc)) from exc
@@ -471,13 +498,7 @@ def register_deskmate_methods(rpc: JsonRpcServer, ops: DeskmateOps) -> None:
         return await _run("deskmate_discover_failed", ops.discover, _optional_str(params, "chrome_dir"))
 
     async def _sync(params: dict[str, Any]) -> dict[str, object]:
-        return await _run(
-            "deskmate_sync_failed",
-            ops.sync,
-            profiles=_optional_profiles(params),
-            repo=_optional_str(params, "repo"),
-            chrome_dir=_optional_str(params, "chrome_dir"),
-        )
+        return await _run("deskmate_sync_failed", ops.sync, profiles=_optional_profiles(params))
 
     async def _repo_set(params: dict[str, Any]) -> dict[str, object]:
         path = params.get("path")
