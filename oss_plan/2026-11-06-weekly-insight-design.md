@@ -1,8 +1,8 @@
 # 소프트웨어 설계서 (SDD): 리치미니 데스크메이트 — 기능 1 위클리 인사이트
 
-- **문서 버전**: 0.8.2
+- **문서 버전**: 0.8.3
 - **작성일**: 2026-11-06
-- **상태**: 요구사항 확정 · 1~6장 확정 · 검수 반영 · Chrome 다중 프로필 반영 · **구현 M0~M5 완료, M6 에뮬레이터 연동 대기** (2026-11-07)
+- **상태**: 요구사항 확정 · 1~6장 확정 · 검수 반영 · Chrome 다중 프로필 반영 · **구현 M0~M6 코드 완료, 에뮬레이터 시나리오 검증 대기** (2026-11-07)
 - **검수**: 2026-11-06 20년차 풀스택 관점 서브에이전트 검수 반영 (부록 C)
 - **베이스**: upstream `reachy_mini_conversation_app` (OpenAI/Gemini realtime 백엔드, `tools/`의 `Tool` 서브클래스로 기능 확장)
 
@@ -227,6 +227,7 @@ class FinishInsight(Tool):  # tools/finish_insight.py
   당시 한도를 확인해 기본값을 맞춘다.
 - 하루 최대 요약 건수·요약 호출 간격은 처음엔 `src/deskmate/summarize/` 상단의 모듈 상수로
   두고, 백필(M7)에서 .env 설정으로 올린다.
+- 처음 세팅할 때는 `python -m deskmate.sync --discover`로 자동 탐색된 User Data 경로, 프로필(폴더명 + 표시 이름), 북마크 파일과 개수를 확인하고 출력된 .env 줄을 복사한다. 탐색이 안 되면 Chrome의 `chrome://version`에 보이는 "프로필 경로"의 상위 폴더를 `DESKMATE_CHROME_USER_DATA_DIR`에 적는다.
 
 ### 2.4 북마크 동기화 요구사항 (기반 A)
 
@@ -239,6 +240,7 @@ class FinishInsight(Tool):  # tools/finish_insight.py
   목록에 있는데 폴더가 없으면 경고하고 건너뛴다. User Data 경로를 .env로 직접 지정하면
   위치 탐색을 건너뛴다 (프로필 목록 읽기는 동일). 파싱 실패(Chrome이 쓰는 도중 등)는 1회
   재시도.
+- **계정 저장소 파일**: 구글 계정으로 로그인한 Chrome은 북마크를 `<Profile>/AccountBookmarks`(같은 JSON 형식)에 두며 `Bookmarks`가 없을 수 있다. 두 파일을 모두 읽어 같은 프로필 안에서 합친다. 프로필 간 비병합 원칙은 그대로다.
 - **안정 키는 Chrome `guid`.** `chrome_id`(프로필 로컬 id, Chrome Sync 시 기기마다 다름)
   대신 `guid`를 북마크 id로 쓴다. 같은 프로필 안에서 같은 URL이 두 폴더에 있으면 URL
   정규화 키로 파일 1개만 만들고 `tags`를 병합한다. **프로필 간에는 병합하지 않는다**
@@ -533,6 +535,7 @@ tests/deskmate/
 | M7 백필·부분 인사이트 | B | `backfilling`/`partial` 상태, 쪼개기 배치, 하루 상한·간격 .env | 상한 초과 시 백그라운드 전환, 중단 후 재개, 부분 인사이트 | M4, M5 (데모 범위 밖) |
 | M8 대화 로그 PR | 메인 | transcript observer 로거 + fan-out 래퍼 (별도 PR) | JSONL 생성, 콘솔 observer 공존, `finish_insight`가 원문 접힘 절 추가 | M6 (별도 PR) |
 | M9 깃 미러·MCP 서버 (선택) | — | 북마크별 과거 날짜 커밋 재구성 스크립트, 패키지를 감싸는 MCP 서버 | 프런트매터 `date`로 재구성한 로그가 시간순, 서버가 같은 결과 반환 | M2 (후순위) |
+| M10 셋업 대시보드 | 메인 | 설정 웹 UI(7860)에 DeskMate 패널: 프로필 탐색·동기화·.env 적용·데모 데이터 버튼 (`deskmate_routes.py`, 셸 실행 없음) | 터미널 없이 첫 세팅 완료, 결과가 화면에 표시, Windows 동작, 라우트 테스트 | M6 (에뮬레이터 검증 후), 계획: `2026-11-07-deskmate-setup-dashboard-plan.md` |
 
 #### 6.3.1 진행 상황 (2026-11-07 새벽, 브랜치 `feat/weekly-insight`)
 
@@ -543,10 +546,13 @@ tests/deskmate/
 | M2 | 완료 | `deskmate.sync` (A 트랙, 테스트 43) + `python -m deskmate.sync` CLI |
 | M3·M4 | 완료 | `deskmate.summarize`·`deskmate.insight` (B 트랙, 테스트 25) |
 | M5 | 완료 | 도구 5개 (C 트랙, 테스트 28) + 종단 테스트 `test_deskmate_e2e.py` (A+B+C 합류) |
-| M6 | 일부 | `deskmate.session`(상태 기계)은 있음. **앱 훅 미연결**: activity observer heartbeat, 10분 무응답·슬립·종료 시 자동 마감. 에뮬레이터 시나리오 1~6 미검증 |
+| M6 | 코드 완료 | `deskmate.session`에 `close_if_idle`·`auto_finish`(노트에 `_자동 종료: <사유>_` 절 기록) 추가. 앱 훅 `deskmate_hooks.py`: activity observer heartbeat(`LocalStream.add_activity_observer` 팬아웃), 무응답 감시 스레드(2초 폴링, `DESKMATE_INSIGHT_IDLE_TIMEOUT_MIN`), `go_to_sleep_action` 진입·앱 종료 `finally`에서 자동 마감. `finish_insight` 세션 없음 오류에 `next_action` 추가. **에뮬레이터 시나리오 1~6은 사용자 세션에서 검증 예정** |
 | M7~M9 | 미착수 | |
+| M10 | 계획 작성 | 2026-11-07 사용자 아이디어. 계획 문서 초안, 구현 전 검토 필요 |
 
-전체 게이트: ruff·mypy strict·pytest 646개 통과 (macOS). Windows CI는 PR 시 확인.
+전체 게이트: ruff·mypy strict·pytest 664개 통과 (macOS). Windows CI는 PR 시 확인.
+
+- 2026-11-07 추가 (M2 보완): Chrome 로그인 계정 북마크 파일 `AccountBookmarks`도 읽어 같은 프로필 안에서 `Bookmarks`와 합친다 (로그인 상태의 Chrome은 `Bookmarks` 없이 `AccountBookmarks`만 가질 수 있음. 사용자 PC에서 확인). 파일 하나라도 깨지면 그 프로필은 건너뛴다(부분 읽기로 인한 오보관 방지). 세팅 확인용 `python -m deskmate.sync --discover`(프로필·북마크 파일·개수와 .env 줄 출력) 추가.
 
 ### 6.4 병렬 트랙과 합류
 
