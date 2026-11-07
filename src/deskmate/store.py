@@ -346,6 +346,7 @@ def note_from_text(text: str, path: Path | None = None) -> tuple[InsightNote, st
     note.unavailable = [str(x) for x in data.get("unavailable") or []]
     note.bookmark_ids = [str(x) for x in data.get("bookmark_ids") or []]
     note.complete = _parse_bool(data.get("complete", True))
+    note.pending = [str(x) for x in data.get("pending") or []]
     rendered, conversations = _split_conversations(body)
     note.conversations = conversations
     note.path = path
@@ -364,6 +365,8 @@ def note_to_text(note: InsightNote, rendered_body: str) -> str:
         "unavailable": list(note.unavailable),
         "clusters": [cluster.to_dict() for cluster in note.clusters],
     }
+    if note.pending:  # only partial notes carry the list (complete notes stay byte-compatible with M4)
+        data["pending"] = list(note.pending)
     body = rendered_body.rstrip("\n") + "\n"
     for section in note.conversations:
         body += "\n" + section.rstrip("\n") + "\n"

@@ -11,6 +11,10 @@ One run processes the bookmarks it is given, in order, under ``repo_lock``:
 
 ``_sleep`` is module-level so tests can replace it; the daily counter lives in
 ``<state_dir>/summarize_counter.json`` so an interrupted batch resumes safely.
+The per-run cap, the daily cap and the call interval come from
+``DeskmateSettings`` (``batch_max_summaries``, ``daily_max_summaries``,
+``call_interval_s``); the report flags which cap stopped the run so the
+insight builder can tell a partial note from a complete one (M7).
 """
 
 from __future__ import annotations
@@ -28,9 +32,7 @@ from deskmate.store import repo_lock, modify_bookmark, atomic_write_text
 from deskmate.models import FETCH_FAILED_SUMMARY_TEXT, Bookmark
 from deskmate.settings import DeskmateSettings
 from deskmate.summarize import (
-    CALL_INTERVAL_S,
     RETRY_BACKOFF_DAYS,
-    DAILY_MAX_SUMMARIES,
     MAX_CONSECUTIVE_LLM_FAILURES,
     SummarizeReport,
 )
@@ -204,6 +206,8 @@ class _Run:
         self.report = SummarizeReport()
         self.today = local_date(now)
         self.daily_count = load_daily_count(settings, self.today)
+        self.daily_max = max(0, settings.daily_max_summaries)
+        self.call_interval_s = max(0.0, float(settings.call_interval_s))
         self.calls_this_run = 0
         self.consecutive_llm_failures = 0
 
@@ -215,7 +219,7 @@ class _Run:
     def summarize_text(self, bookmark: Bookmark, text: str) -> str:
         """Call the model (respecting the call interval) and log its usage."""
         if self.calls_this_run > 0:
-            _sleep(CALL_INTERVAL_S)
+            _sleep(self.call_interval_s)
         clipped = text[: self.settings.body_max_chars]
         try:
             result = self.llm.summarize(title=bookmark.title, url=bookmark.url, text=clipped)
@@ -268,14 +272,16 @@ class _Run:
         cap = max(0, self.settings.batch_max_summaries)
         queue, overflow = fetchable[:cap], fetchable[cap:]
         if overflow:
+            self.report.batch_cap_reached = True
             self.warn(f"batch cap {cap} reached; {len(overflow)} bookmark(s) left for a later run")
             self.report.skipped.extend(item.guid for item in overflow)
 
         with client_scope(self.client) as http:
             for index, bookmark in enumerate(queue):
-                if self.daily_count >= DAILY_MAX_SUMMARIES:
+                if self.daily_count >= self.daily_max:
                     rest = queue[index:]
-                    self.warn(f"daily cap {DAILY_MAX_SUMMARIES} reached; {len(rest)} bookmark(s) left for tomorrow")
+                    self.report.daily_cap_reached = True
+                    self.warn(f"daily cap {self.daily_max} reached; {len(rest)} bookmark(s) left for tomorrow")
                     self.report.skipped.extend(item.guid for item in rest)
                     break
                 try:

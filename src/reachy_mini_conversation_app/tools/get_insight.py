@@ -3,6 +3,11 @@
 Never does heavy work: a missing or stale note yields ``status: generating`` and
 tells the model to call ``build_insight`` (the pomodoro focus→break hand-off
 pattern), so the voice loop is never blocked by fetching or LLM calls.
+
+M7: a partial note (``complete: false``) whose bookmark set is still current is
+not stale; it is returned as ``status: partial`` with the counts and an offer
+to continue. While a ``build_insight`` for the same profile and period is
+running in this process the answer is ``status: backfilling`` (no session).
 """
 
 from __future__ import annotations
@@ -11,17 +16,22 @@ import logging
 from typing import Any
 
 from deskmate.store import note_path, read_note, note_is_stale, bookmarks_in_period
+from deskmate.insight.builder import daily_cap_reached, pending_bookmarks
+from deskmate.summarize.runner import resolve_now
 from reachy_mini_conversation_app.tools.core_tools import Tool, ToolDependencies
 from reachy_mini_conversation_app.tools._deskmate_common import (
     READY_NEXT_ACTION,
     ToolContext,
     today_iso,
     elapsed_ms,
+    is_building,
     empty_result,
     profile_hint,
     ready_result,
+    partial_result,
     prepare_context,
     sync_before_read,
+    backfilling_result,
 )
 
 
@@ -45,7 +55,9 @@ class GetInsight(Tool):
     description = (
         "Get the weekly insight (topic clusters, correlations, one question each) for the user's "
         "bookmarks in a period. Returns immediately. status 'ready' has the clusters; 'generating' "
-        "means you must call build_insight next; 'empty' means no bookmarks in the period. "
+        "means you must call build_insight next; 'empty' means no bookmarks in the period; 'partial' has "
+        "the clusters of the bookmarks seen so far plus pending_count not yet summarized (call build_insight "
+        "again when the user asks to continue); 'backfilling' means build_insight is running right now. "
         "Use days (default 7) or since/until, never both. "
     )
     parameters_schema = {
@@ -74,6 +86,9 @@ class GetInsight(Tool):
         ctx = prepare_context(kwargs)
         if not isinstance(ctx, ToolContext):
             return ctx
+        if is_building(ctx.profile, ctx.period):
+            # The pipeline holds the repository lock; answer before touching sync or the note.
+            return backfilling_result(ctx)
 
         sync_warning = sync_before_read(ctx.settings, ctx.profile)
         result = self._read(ctx, bookmarks_in_period(ctx.settings, ctx.profile, ctx.period))
@@ -93,7 +108,14 @@ class GetInsight(Tool):
                 logger.warning("Unreadable insight note %s: %s", path, exc)
             else:
                 if not note_is_stale(note, bookmarks):
-                    return ready_result(note, ctx.profile, READY_NEXT_ACTION)
+                    if note.complete:
+                        return ready_result(note, ctx.profile, READY_NEXT_ACTION)
+                    pending = pending_bookmarks(bookmarks)
+                    if pending:  # partial and current: talk with what is there, offer to continue
+                        note.pending = [bookmark.guid for bookmark in pending]
+                        note.daily_cap_reached = daily_cap_reached(ctx.settings, resolve_now(None))
+                        return partial_result(note, ctx, READY_NEXT_ACTION)
+                    # Everything got summarized but the note was never finalized → one more build.
 
         call = ctx.args.build_insight_call(ctx.profile)
         return {

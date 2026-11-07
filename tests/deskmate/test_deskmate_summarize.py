@@ -389,6 +389,52 @@ def test_daily_cap_is_persisted(repo_settings: DeskmateSettings, client: httpx.C
     assert fresh_day.summarized == [items[1].guid]
 
 
+def test_runner_reads_caps_and_interval_from_settings(
+    repo_settings: DeskmateSettings, client: httpx.Client, no_sleep: list[float]
+) -> None:
+    """M7: ``call_interval_s`` and ``daily_max_summaries`` come from settings, and the report flags the caps."""
+    tuned = DeskmateSettings(
+        bookmark_repo=repo_settings.bookmark_repo, batch_max_summaries=3, daily_max_summaries=2, call_interval_s=1.5
+    )
+    items = [make_bookmark(tuned, f"s{index}", "https://example.com/ok") for index in range(4)]
+    report = summarize_bookmarks(tuned, FakeLLM(), items, now=NOW, client=client)
+    assert report.summarized == [items[0].guid, items[1].guid]
+    assert no_sleep == [1.5]  # one interval between the two model calls, from settings not the constant
+    assert report.batch_cap_reached is True and report.daily_cap_reached is True
+    assert sorted(report.skipped) == sorted([items[2].guid, items[3].guid])
+
+    # Below both caps nothing is flagged.
+    roomy = DeskmateSettings(bookmark_repo=repo_settings.bookmark_repo, daily_max_summaries=50, call_interval_s=0.0)
+    report = summarize_bookmarks(roomy, FakeLLM(), [items[2]], now=NOW, client=client)
+    assert report.summarized == [items[2].guid]
+    assert report.batch_cap_reached is False and report.daily_cap_reached is False
+
+
+def test_daily_cap_and_interval_settings_from_env(tmp_path: Path) -> None:
+    """``DESKMATE_DAILY_MAX_SUMMARIES`` / ``DESKMATE_CALL_INTERVAL_S`` are read; defaults match the constants."""
+    from deskmate.settings import load_settings
+
+    defaults = load_settings({"DESKMATE_BOOKMARK_REPO": str(tmp_path)})
+    assert defaults.daily_max_summaries == DAILY_MAX_SUMMARIES == 100
+    assert defaults.call_interval_s == CALL_INTERVAL_S == 6.0
+    tuned = load_settings(
+        {
+            "DESKMATE_BOOKMARK_REPO": str(tmp_path),
+            "DESKMATE_DAILY_MAX_SUMMARIES": "30",
+            "DESKMATE_CALL_INTERVAL_S": "2.5",
+        }
+    )
+    assert tuned.daily_max_summaries == 30 and tuned.call_interval_s == 2.5
+    broken = load_settings(
+        {
+            "DESKMATE_BOOKMARK_REPO": str(tmp_path),
+            "DESKMATE_DAILY_MAX_SUMMARIES": "many",
+            "DESKMATE_CALL_INTERVAL_S": "x",
+        }
+    )
+    assert broken.daily_max_summaries == 100 and broken.call_interval_s == 6.0
+
+
 def test_user_sections_survive_resummarize(repo_settings: DeskmateSettings, client: httpx.Client) -> None:
     """Re-summarizing a failed bookmark replaces only ``## 요약``; the user's notes stay."""
     body = f"## 요약\n{FETCH_FAILED_SUMMARY_TEXT}\n\n## 내 메모\n- 월요일에 다시 보기\n"

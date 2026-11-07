@@ -120,6 +120,51 @@ async def test_full_pipeline_through_the_tools(e2e_env: Path) -> None:
     assert SESSION_MANAGER.current() is None
 
 
+@pytest.mark.asyncio
+async def test_backfill_in_chunks_through_the_tools(e2e_env: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """M7: cap 1 per call → partial → partial (resume) → ready, with get_insight reporting partial in between."""
+    monkeypatch.setenv("DESKMATE_BATCH_MAX_SUMMARIES", "1")
+    monkeypatch.setenv("DESKMATE_CALL_INTERVAL_S", "0")
+    deps = _deps()
+    kwargs: dict[str, Any] = {"since": "2026-10-31", "until": "2026-11-06"}
+
+    assert (await GetInsight()(deps, **kwargs))["status"] == "generating"
+
+    first = await BuildInsight()(deps, **kwargs)
+    assert first.get("error") is None, first
+    assert first["status"] == "partial"
+    assert first["summarized_count"] == 1 and first["pending_count"] == 2 and first["daily_cap_reached"] is False
+    assert "2건은 아직 안 봤어" in first["next_action"]
+    note_path = Path(first["note_path"])
+    partial_note, rendered = read_note(note_path)
+    assert partial_note.complete is False and len(partial_note.pending) == 2
+    assert "## 미요약" in rendered and "아직 요약하지 않은 북마크 2건" in rendered
+    assert SESSION_MANAGER.current() is not None
+
+    # Asking again before continuing: the partial note is current, so no rebuild is forced.
+    meanwhile = await GetInsight()(deps, **kwargs)
+    assert meanwhile["status"] == "partial"
+    assert meanwhile["summarized_count"] == 1 and meanwhile["pending_count"] == 2
+    assert "build_insight(since='2026-10-31', until='2026-11-06', profile='Default')" in meanwhile["next_action"]
+
+    # "이어서 정리해 줘" → the next chunk; then the last one completes the note.
+    second = await BuildInsight()(deps, **kwargs)
+    assert second["status"] == "partial" and second["summarized_count"] == 2 and second["pending_count"] == 1
+    third = await BuildInsight()(deps, **kwargs)
+    assert third["status"] == "ready" and "pending_count" not in third
+    complete_note, rendered = read_note(note_path)
+    assert complete_note.complete is True and complete_note.pending == [] and "## 미요약" not in rendered
+    assert len(complete_note.bookmark_ids) == 3
+    from deskmate.store import bookmarks_in_period
+    from deskmate.periods import Period
+
+    week = Period(since=date(2026, 10, 31), until=date(2026, 11, 6))
+    statuses = {b.url: b.summary_status for b in bookmarks_in_period(_settings_from_env(), "Default", week)}
+    assert statuses["https://example.com/rust/async-intro"] == "fetch_failed"
+    assert len(statuses) == 3 and all(status != "pending" for status in statuses.values())
+    assert (await GetInsight()(deps, **kwargs))["status"] == "ready"
+
+
 def _settings_from_env() -> Any:
     from deskmate.settings import load_settings
 

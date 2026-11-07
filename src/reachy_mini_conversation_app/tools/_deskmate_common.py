@@ -2,17 +2,20 @@
 
 Not a tool itself: the leading underscore keeps ``list_tool_module_names`` from
 discovering it. Everything that more than one DeskMate tool needs lives here:
-settings loading, profile / period resolution, ``today`` and the shared result
-shapes (``empty`` / ``ready``). Settings are loaded on every call (never at
-import time) so the environment can change under the running app and tests
-can monkeypatch it.
+settings loading, profile / period resolution, ``today``, the shared result
+shapes (``empty`` / ``ready`` / ``partial`` / ``backfilling``) and the
+in-process registry of running ``build_insight`` pipelines (M7). Settings are
+loaded on every call (never at import time) so the environment can change
+under the running app and tests can monkeypatch it.
 """
 
 from __future__ import annotations
 import time
 import logging
-from typing import Any
+import threading
+from typing import Any, Iterator
 from datetime import date
+from contextlib import contextmanager
 from dataclasses import dataclass
 
 import deskmate.sync as sync_mod
@@ -44,6 +47,18 @@ READY_NEXT_ACTION = (
     "unavailable에 있는 북마크는 '제목만 보고 하는 얘긴데'라고 밝혀라. 첫 발화는 짧은 문장 최대 두 개와 "
     "질문 하나로 끝낸다: 첫 묶음의 summary와 correlation을 한 문장씩 줄여 말하고, 반드시 그 묶음의 "
     "question으로 끝내라. 한국어로만 말한다."
+)
+# --- M7 partial / backfilling wording ------------------------------------------------
+PARTIAL_NOTICE = "'{pending}건은 아직 안 봤어. 이어서 정리해 달라고 하면 계속 볼게'"
+PARTIAL_NOTICE_DAILY_CAP = "'{pending}건은 오늘 요약 한도라 내일 이어서 볼게'"
+PARTIAL_CONTINUE = "사용자가 '이어서 정리해 줘'라고 하면 먼저 '잠깐 훑어볼게'를 소리 내어 말한 다음 {call}를 호출하라."
+PARTIAL_CONTINUE_DAILY_CAP = "오늘은 요약 한도에 걸려 더 못 보니 이어서 정리해 달라고 해도 내일 다시 하자고 말하라."
+PARTIAL_NOTHING_SEEN = "아직 본 북마크가 없어 묶음이 없다. {notice}라고 한 문장으로만 말하고 다른 설명은 덧붙이지 마라. 한국어로만 말한다."
+PARTIAL_NOTHING_SEEN_NOTICE = "'지금은 정리를 못 했어. 이어서 정리해 달라고 하면 다시 해 볼게'"
+PARTIAL_NOTHING_SEEN_NOTICE_DAILY_CAP = "'오늘은 요약 한도라 아직 못 봤어. 내일 이어서 볼게'"
+BACKFILLING_NEXT_ACTION = (
+    "이 기간의 북마크를 지금 훑는 중이다(build_insight가 돌고 있다). 한국어로 짧게 '아직 훑는 중이야, 잠깐만'이라고만 "
+    "답하고 build_insight를 다시 호출하지 마라. 끝나면 결과가 전달된다."
 )
 
 
@@ -92,6 +107,37 @@ def sync_before_read(settings: DeskmateSettings, profile: str) -> str | None:
     if warnings:
         logger.warning("sync before read (%s): %s", profile, "; ".join(warnings))
     return "; ".join(warnings) or None
+
+
+# --- running build_insight registry (M7: get_insight answers "backfilling" meanwhile) ----------
+
+_BUILDING: set[tuple[str, str]] = set()  # (profile, period.key) of pipelines running in this process
+_BUILDING_GUARD = threading.Lock()
+
+
+def reset_building() -> None:
+    """Forget every running pipeline (tests)."""
+    with _BUILDING_GUARD:
+        _BUILDING.clear()
+
+
+def is_building(profile: str, period: Period) -> bool:
+    """Whether a ``build_insight`` for ``profile``/``period`` is running in this process right now."""
+    with _BUILDING_GUARD:
+        return (profile, period.key) in _BUILDING
+
+
+@contextmanager
+def building(profile: str, period: Period) -> Iterator[None]:
+    """Mark ``profile``/``period`` as being built for the duration of the block."""
+    key = (profile, period.key)
+    with _BUILDING_GUARD:
+        _BUILDING.add(key)
+    try:
+        yield
+    finally:
+        with _BUILDING_GUARD:
+            _BUILDING.discard(key)
 
 
 # --- settings / profile ------------------------------------------------------------
@@ -251,12 +297,56 @@ def empty_result(ctx: ToolContext) -> dict[str, Any]:
     }
 
 
-def ready_result(note: InsightNote, profile: str, next_action: str) -> dict[str, Any]:
-    """``status: ready`` from a note; opens the insight session (§3.3)."""
+def ready_result(note: InsightNote, profile: str, next_action: str, status: str = "ready") -> dict[str, Any]:
+    """``status: ready`` (or ``partial``) from a note; opens the insight session (§3.3)."""
     if note.path is not None:
         SESSION_MANAGER.open(profile, note.path)
-    result: dict[str, Any] = {"status": "ready", "today": today_iso()}
+    result: dict[str, Any] = {"status": status, "today": today_iso()}
     result.update(note.to_tool_result())
     result["profile"] = profile
     result["next_action"] = next_action
     return result
+
+
+def partial_next_action(
+    *, summarized_count: int, pending_count: int, daily_cap_reached: bool, has_clusters: bool, call: str, talk: str
+) -> str:
+    """Korean instruction for a partial note (M7): announce what is not seen yet, then talk per ``talk``."""
+    if not has_clusters:
+        notice = PARTIAL_NOTHING_SEEN_NOTICE_DAILY_CAP if daily_cap_reached else PARTIAL_NOTHING_SEEN_NOTICE
+        return PARTIAL_NOTHING_SEEN.format(notice=notice)
+    notice = (PARTIAL_NOTICE_DAILY_CAP if daily_cap_reached else PARTIAL_NOTICE).format(pending=pending_count)
+    follow_up = PARTIAL_CONTINUE_DAILY_CAP if daily_cap_reached else PARTIAL_CONTINUE.format(call=call)
+    return (
+        f"이 기간의 노트는 아직 부분 노트다: {summarized_count}건까지 봤고 {pending_count}건은 아직 안 봤다. "
+        f"있는 것으로 바로 이야기를 시작하되, 첫 발화 맨 앞에 {notice}라고 한 문장 알려라. "
+        f"{follow_up} 그다음은 이렇게 한다: {talk}"
+    )
+
+
+def partial_result(note: InsightNote, ctx: ToolContext, talk: str) -> dict[str, Any]:
+    """``status: partial`` from a note whose batch is not finished (M7); opens the session like ``ready``."""
+    next_action = partial_next_action(
+        summarized_count=note.summarized_count,
+        pending_count=note.pending_count,
+        daily_cap_reached=note.daily_cap_reached,
+        has_clusters=bool(note.clusters),
+        call=ctx.args.build_insight_call(ctx.profile),
+        talk=talk,
+    )
+    result = ready_result(note, ctx.profile, next_action, status="partial")
+    result["summarized_count"] = note.summarized_count
+    result["pending_count"] = note.pending_count
+    result["daily_cap_reached"] = note.daily_cap_reached
+    return result
+
+
+def backfilling_result(ctx: ToolContext) -> dict[str, Any]:
+    """``status: backfilling``: a ``build_insight`` for this profile/period is running right now (no session)."""
+    return {
+        "status": "backfilling",
+        "today": today_iso(),
+        "profile": ctx.profile,
+        "period": ctx.period.to_dict(),
+        "next_action": BACKFILLING_NEXT_ACTION,
+    }

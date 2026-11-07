@@ -19,14 +19,18 @@ itself; ``runner._sleep`` is the monkeypatch point for the call interval).
 from __future__ import annotations
 from dataclasses import field, dataclass
 
+from deskmate.settings import DEFAULT_CALL_INTERVAL_S, DEFAULT_DAILY_MAX_SUMMARIES
 
-# --- tuning constants (§2.3: module constants until M7 promotes them to .env) ---
+
+# --- tuning constants ---
 FETCH_MAX_BYTES = 2 * 1024 * 1024
 FETCH_TIMEOUT_S = 10.0
 FETCH_MAX_REDIRECTS = 5
 MIN_BODY_CHARS = 200
-DAILY_MAX_SUMMARIES = 100
-CALL_INTERVAL_S = 6.0
+# Daily cap and call interval are settings since M7 (``DESKMATE_DAILY_MAX_SUMMARIES`` /
+# ``DESKMATE_CALL_INTERVAL_S``); these module names remain as the defaults.
+DAILY_MAX_SUMMARIES = DEFAULT_DAILY_MAX_SUMMARIES
+CALL_INTERVAL_S = DEFAULT_CALL_INTERVAL_S
 RETRY_BACKOFF_DAYS: tuple[int, ...] = (1, 3, 7)
 # A model failure (503, timeout) marks that bookmark ``summary_error`` and the run
 # continues; this many failures in a row mean the service is down → stop the run.
@@ -42,6 +46,8 @@ class SummarizeReport:
     llm_failed: list[str] = field(default_factory=list)  # fetched but the model call failed (still pending)
     skipped: list[str] = field(default_factory=list)  # already ok / excluded / backoff
     warnings: list[str] = field(default_factory=list)
+    batch_cap_reached: bool = False  # more candidates than ``batch_max_summaries``: left for a later run
+    daily_cap_reached: bool = False  # ``daily_max_summaries`` hit: the rest waits for tomorrow
 
 
 # The runner reads the constants above, so it is imported once they exist.

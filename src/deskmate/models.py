@@ -111,9 +111,10 @@ class InsightNote:
     until: date
     generated_at: str  # ISO 8601
     clusters: list[InsightCluster] = field(default_factory=list)
-    unavailable: list[str] = field(default_factory=list)  # bookmark guids without body
-    bookmark_ids: list[str] = field(default_factory=list)  # every bookmark the note covers
+    unavailable: list[str] = field(default_factory=list)  # bookmark guids without body (fetch_failed)
+    bookmark_ids: list[str] = field(default_factory=list)  # every bookmark of the period (seen or not)
     complete: bool = True  # False while a backfill is still running (M7)
+    pending: list[str] = field(default_factory=list)  # guids not summarized yet (M7 partial note); empty = complete
     conversations: list[str] = field(default_factory=list)  # raw "## 대화 기록" sections, preserved verbatim
     path: Any = None
     # Runtime-only (never written to disk): the batch model was unavailable and this
@@ -121,6 +122,19 @@ class InsightNote:
     # of the period it does not cover yet.
     degraded: bool = False
     pending_titles: list[str] = field(default_factory=list)
+    # Runtime-only (M7): the daily summary cap stopped the batch, so the pending
+    # bookmarks can only continue tomorrow.
+    daily_cap_reached: bool = False
+
+    @property
+    def summarized_count(self) -> int:
+        """Bookmarks of the period the note is built from (everything that is not pending)."""
+        return max(0, len(self.bookmark_ids) - len(self.pending))
+
+    @property
+    def pending_count(self) -> int:
+        """Bookmarks of the period the batch has not summarized yet."""
+        return len(self.pending)
 
     @property
     def key(self) -> str:

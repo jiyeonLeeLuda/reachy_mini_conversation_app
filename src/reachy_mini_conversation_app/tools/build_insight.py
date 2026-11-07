@@ -4,6 +4,12 @@ Long-running: the backends run every tool through ``BackgroundToolManager``,
 so the model only sees the result when this coroutine returns, exactly like a
 pomodoro phase ending. ``get_insight`` hands off to this tool when the note is
 missing or stale.
+
+M7: one call summarizes at most ``batch_max_summaries`` pending bookmarks (and
+never past the daily cap) and writes the note from everything summarized so
+far. Pending bookmarks left → ``status: partial`` with the counts; calling
+again continues from them. While the pipeline runs the profile/period is
+registered so ``get_insight`` answers ``backfilling``.
 """
 
 from __future__ import annotations
@@ -22,10 +28,12 @@ from reachy_mini_conversation_app.deskmate_progress import working_signal
 from reachy_mini_conversation_app.tools.get_insight import PERIOD_PROPERTIES
 from reachy_mini_conversation_app.tools._deskmate_common import (
     ToolContext,
+    building,
     elapsed_ms,
     empty_result,
     profile_hint,
     ready_result,
+    partial_result,
     prepare_context,
 )
 
@@ -58,8 +66,9 @@ class BuildInsight(Tool):
     name = "build_insight"
     description = (
         "Build the weekly insight note for a period (sync bookmarks, summarize, cluster). Call it only "
-        "when get_insight returned status 'generating', with the same since/until/profile. It takes a "
-        "while; the result arrives when the note is ready and tells you how to start talking. "
+        "when get_insight returned status 'generating', or 'partial' and the user asks to continue, with "
+        "the same since/until/profile. It takes a while; the result arrives when the note is ready (or "
+        "'partial' when more bookmarks than one batch allows are still pending) and tells you how to start talking. "
     )
     parameters_schema = {
         "type": "object",
@@ -80,8 +89,9 @@ class BuildInsight(Tool):
             return ctx
         try:
             # CancelledError (task_cancel) is not an Exception subclass: it propagates.
-            async with working_signal(deps):
-                result = await asyncio.to_thread(_run_pipeline, ctx)
+            with building(ctx.profile, ctx.period):
+                async with working_signal(deps):
+                    result = await asyncio.to_thread(_run_pipeline, ctx)
         except Exception as exc:
             logger.exception("build_insight failed")
             result = {"error": f"{type(exc).__name__}: {exc}", "profile": ctx.profile}
@@ -131,6 +141,8 @@ def _run_pipeline(ctx: ToolContext) -> dict[str, Any]:
         result = ready_result(note, ctx.profile, DEGRADED_NEXT_ACTION.format(count=len(pending)))
         result["degraded"] = True
         result["pending_titles"] = pending
+    elif not getattr(note, "complete", True):
+        result = partial_result(note, ctx, BUILT_NEXT_ACTION)
     else:
         result = ready_result(note, ctx.profile, BUILT_NEXT_ACTION)
     if warning:
