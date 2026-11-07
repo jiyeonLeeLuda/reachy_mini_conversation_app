@@ -1,8 +1,8 @@
 # 소프트웨어 설계서 (SDD): 리치미니 데스크메이트 — 기능 1 위클리 인사이트
 
-- **문서 버전**: 0.8.3
+- **문서 버전**: 0.8.4
 - **작성일**: 2026-11-06
-- **상태**: 요구사항 확정 · 1~6장 확정 · 검수 반영 · Chrome 다중 프로필 반영 · **구현 M0~M6 코드 완료, 에뮬레이터 시나리오 검증 대기** (2026-11-07)
+- **상태**: 요구사항 확정 · 1~6장 확정 · 검수 반영 · Chrome 다중 프로필 반영 · **구현 M0~M6 완료, 에뮬레이터 시나리오 1·2·4·5·6 통과, 3은 통과율 측정 중** (2026-11-07)
 - **검수**: 2026-11-06 20년차 풀스택 관점 서브에이전트 검수 반영 (부록 C)
 - **베이스**: upstream `reachy_mini_conversation_app` (OpenAI/Gemini realtime 백엔드, `tools/`의 `Tool` 서브클래스로 기능 확장)
 
@@ -363,6 +363,7 @@ summarized_at: 2026-11-08
 - 입력: 기간 내 북마크의 url, title, tags, date, 그리고 요약 본문. private·archived 제외.
 - 출력: 옵시디언용 마크다운 노트 1개 (기간당 1개). 사람이 읽기 좋은 형식이어야 하고,
   봇은 이 노트를 읽어 대화한다.
+- **실패 처리 (2026-11-07 확정)**: 배치 LLM 호출은 30초 타임아웃, 재시도 2회, thinking 예산 0. 북마크 1건의 모델 호출 실패는 summary_status: pending + summary_error로 남기고 계속한다(연속 3회 실패 시 중단). 묶음 호출이 실패하고 같은 기간의 이전 노트가 있으면 그 노트를 degraded ready로 돌려주고 미반영 북마크 제목을 함께 준다. build_insight가 도는 동안 앱은 효과음·안테나 모션으로 진행 중임을 알린다(소리·간격은 deskmate_progress.py 상단 상수).
 
 ### 2.6 대화 로그 저장 요구사항
 
@@ -433,6 +434,7 @@ summarized_at: 2026-11-08
    인자가 아니다 (2.2). 상태 기계는 `src/deskmate/session.py`에 두고 앱 훅이 호출한다
    (6장 M6). 세션은 `profile`을 보유하므로 `finish_insight`는 프로필 인자 없이 올바른
    프로필의 노트에 기록한다.
+4. **안전망**: 세션 관리자는 마지막으로 닫힌 세션(프로필·노트 경로)을 기억한다. 열린 세션이 없는 상태에서 finish_insight가 오면 그 노트에 결론을 한 번 기록하고 reopened_last=true를 돌려준다(조기 종료·자동 종료 뒤 결론 유실 방지). 그 다음 호출은 오류다.
 
 ## 4. 비기능 요구사항
 
@@ -546,14 +548,16 @@ tests/deskmate/
 | M2 | 완료 | `deskmate.sync` (A 트랙, 테스트 43) + `python -m deskmate.sync` CLI |
 | M3·M4 | 완료 | `deskmate.summarize`·`deskmate.insight` (B 트랙, 테스트 25) |
 | M5 | 완료 | 도구 5개 (C 트랙, 테스트 28) + 종단 테스트 `test_deskmate_e2e.py` (A+B+C 합류) |
-| M6 | 코드 완료 | `deskmate.session`에 `close_if_idle`·`auto_finish`(노트에 `_자동 종료: <사유>_` 절 기록) 추가. 앱 훅 `deskmate_hooks.py`: activity observer heartbeat(`LocalStream.add_activity_observer` 팬아웃), 무응답 감시 스레드(2초 폴링, `DESKMATE_INSIGHT_IDLE_TIMEOUT_MIN`), `go_to_sleep_action` 진입·앱 종료 `finally`에서 자동 마감. `finish_insight` 세션 없음 오류에 `next_action` 추가. **에뮬레이터 시나리오 1~6은 사용자 세션에서 검증 예정** |
+| M6 | 완료 | `deskmate.session`에 `close_if_idle`·`auto_finish`(노트에 `_자동 종료: <사유>_` 절 기록) 추가. 앱 훅 `deskmate_hooks.py`: activity observer heartbeat(`LocalStream.add_activity_observer` 팬아웃), 무응답 감시 스레드(2초 폴링, `DESKMATE_INSIGHT_IDLE_TIMEOUT_MIN`), `go_to_sleep_action` 진입·앱 종료 `finally`에서 자동 마감. `finish_insight` 세션 없음 오류에 `next_action` 추가. 코드 완료 + 실기기(시뮬 + 실제 Chrome 북마크) 검증 2026-11-07: 시나리오 1 통과(생성 → 묶음+질문 → explicit 종료 → 노트), 2 통과(빈 기간 멘트), 4 통과(본문 미확보 → 노트 '본문 미확보' 절, 기존 대화 기록 절 보존), 5 통과(무응답 1분 자동 종료 절, 앱 종료 절 실측; 슬립 경로는 단위 테스트), 6 통과(동기화 로그에 프로필 열거·Profile 1 건너뜀·폴더 미생성, 미허용 프로필 요청 → unknown profile + available). 시나리오 3은 1/5 통과(새 세션에서는 '마칠까?' 질문 후 confirmed 종료 + 뽀모도로; 긴 맥락·전사 흔들림에서는 바로 뽀모도로) → 프롬프트 보강 후 재측정 |
 | M7~M9 | 미착수 | |
 | M10 | 계획 작성 | 2026-11-07 사용자 아이디어. 계획 문서 초안, 구현 전 검토 필요 |
 
-전체 게이트: ruff·mypy strict·pytest 664개 통과 (macOS). Windows CI는 PR 시 확인.
+전체 게이트: ruff·mypy strict·pytest 685개 통과 (macOS). Windows CI는 PR 시 확인.
 
 - 2026-11-07 추가 (M2 보완): Chrome 로그인 계정 북마크 파일 `AccountBookmarks`도 읽어 같은 프로필 안에서 `Bookmarks`와 합친다 (로그인 상태의 Chrome은 `Bookmarks` 없이 `AccountBookmarks`만 가질 수 있음. 사용자 PC에서 확인). 파일 하나라도 깨지면 그 프로필은 건너뛴다(부분 읽기로 인한 오보관 방지). 세팅 확인용 `python -m deskmate.sync --discover`(프로필·북마크 파일·개수와 .env 줄 출력) 추가.
 - 2026-11-07 시나리오 1 실제 북마크로 통과 (generating → ready → 묶음+질문 → explicit 종료 → 노트 기록). build_insight 894초 소요 원인은 배치 모델 지연 → 기본값을 gemini-3.5-flash로 변경.
+- 2026-11-07 실측 이슈와 대응 (커밋 cb6604c, 8150ee9, 6e65159): (a) Gemini Live 백엔드가 도구 응답을 앱 전체 하나의 묶음으로 보내 긴 도구(build_insight, pomodoro_timer)가 도는 동안 task_status 응답이 전달되지 않아 봇이 침묵 → 서버 메시지 단위 묶음으로 수정. (b) 배치 모델 호출이 SDK 기본 재시도(5회, 1→60초)로 2~4분 대기 후 503 → 30초 타임아웃·2회 재시도·thinking_budget 0, 요약 실패는 pending 유지 후 계속, 묶음 실패 시 직전 노트를 degraded ready로 제공. (c) 사용자가 작업 중인지 알 수 없음 → build_insight 동안 효과음(시작·10초 틱·완료)과 안테나 모션(deskmate_progress.py). (d) Chrome에 새로 저장한 북마크가 build_insight 전엔 보이지 않음 → get_insight/list_bookmarks가 읽기 전 동기화(30초 스로틀). (e) 봇이 맞장구를 마무리로 오해해 세션을 조기 종료, 이후 진짜 종료가 유실 → 마지막 닫힌 세션 기억 후 finish_insight가 그 노트에 기록(reopened_last), 프롬프트에 명시 마무리 규칙. (f) generating 뒤 봇이 말없이 build_insight만 호출 → 프롬프트에 '먼저 소리 내어 말하기'.
+- 2026-11-07 관찰 (미해결): Live 모델의 thinking 텍스트가 assistant 전사로 로그에 섞임(role=assistant content=thought …); 앱이 회의 중 Google Meet 음성을 그대로 듣고 응답함(마이크 게이팅 필요); 첫 묶음 발화가 길어 되물음(프롬프트로 2문장 제한 적용, 재측정 필요).
 
 ### 6.4 병렬 트랙과 합류
 
