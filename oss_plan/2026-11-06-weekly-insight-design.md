@@ -213,7 +213,7 @@ class FinishInsight(Tool):  # tools/finish_insight.py
 | 대화 로그 폴더 | 북마크 저장소 옆 기본 폴더 | KPI 측정·기능 2 재료, 외부 전송 없음 (2.6, M8) |
 | 토큰 사용량 로그 | `북마크 저장소/.deskmate/usage.jsonl` | 배치 1회당 `usage` 기록 (4장) |
 | 깃 미러 | 꺼짐 | M9. 켜면 북마크별 과거 날짜 커밋 |
-| 배치용 LLM 모델 | Gemini Flash 계열 텍스트 모델 | 요약·상관관계 배치 전용. 음성 대화의 실시간(Live) 모델과 분리 |
+| 배치용 LLM 모델 | gemini-3.5-flash | 요약·상관관계 배치 전용. 음성 대화의 실시간(Live) 모델과 분리 2026-11-07 실측: 3.8-flash는 호출당 230~270초, 3.5-flash는 5초 |
 | 본문 상한 글자 수 | 20000 | 북마크당 LLM에 보내는 본문 길이. 튜닝 상수와 동일 값 |
 | 배치 1회 최대 요약 건수 | 20 | 한 요청에서 즉시 처리하는 상한. 넘으면 백필로 전환 (M7) |
 | 하루 최대 요약 건수 | 100 | 무료 등급 한도 보호. 넘으면 다음 날 이어서 |
@@ -553,6 +553,7 @@ tests/deskmate/
 전체 게이트: ruff·mypy strict·pytest 664개 통과 (macOS). Windows CI는 PR 시 확인.
 
 - 2026-11-07 추가 (M2 보완): Chrome 로그인 계정 북마크 파일 `AccountBookmarks`도 읽어 같은 프로필 안에서 `Bookmarks`와 합친다 (로그인 상태의 Chrome은 `Bookmarks` 없이 `AccountBookmarks`만 가질 수 있음. 사용자 PC에서 확인). 파일 하나라도 깨지면 그 프로필은 건너뛴다(부분 읽기로 인한 오보관 방지). 세팅 확인용 `python -m deskmate.sync --discover`(프로필·북마크 파일·개수와 .env 줄 출력) 추가.
+- 2026-11-07 시나리오 1 실제 북마크로 통과 (generating → ready → 묶음+질문 → explicit 종료 → 노트 기록). build_insight 894초 소요 원인은 배치 모델 지연 → 기본값을 gemini-3.5-flash로 변경.
 
 ### 6.4 병렬 트랙과 합류
 

@@ -49,7 +49,8 @@ DEFAULT_EXCLUDE_URL_PATTERNS: tuple[str, ...] = (
     "192.168.",
 )
 DEFAULT_INSIGHT_IDLE_TIMEOUT_MIN = 10
-DEFAULT_BATCH_MODEL = "gemini-3.8-flash"
+# measured 2026-11-07: gemini-3.8-flash took 230-270 s per generateContent call on a free key (even for a one-line prompt); gemini-3.5-flash took 5 s
+DEFAULT_BATCH_MODEL = "gemini-3.5-flash"
 DEFAULT_BODY_MAX_CHARS = 20_000
 DEFAULT_BATCH_MAX_SUMMARIES = 20
 INSIGHTS_DIRNAME = "insights"
