@@ -161,7 +161,7 @@
 
 ### Task 4: 데모 데이터 버튼 + 문서
 
-> 사용자 문서: [`docs/deskmate-setup.md`](../docs/deskmate-setup.md) (README에는 DeskMate 위클리 인사이트 절이 없어 별도 문서로 두고 README 빠른 시작에서 링크한다).
+> 사용자 문서: [README "DeskMate 첫 세팅 (웹 UI 설정 대시보드)" 절](../README.md#deskmate-첫-세팅-웹-ui-설정-대시보드) (AGENTS.md 규칙대로 `docs/` 아래 별도 md 없이 README 한 곳에 둔다).
 
 **Files:**
 - Create: `src/deskmate/demo.py`
