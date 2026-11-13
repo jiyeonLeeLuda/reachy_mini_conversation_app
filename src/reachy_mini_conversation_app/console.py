@@ -13,6 +13,7 @@ from pathlib import Path
 from collections.abc import Callable, AsyncIterator
 
 import numpy as np
+from dotenv import find_dotenv
 
 from reachy_mini import ReachyMini
 from reachy_mini.io.jsonrpc import JsonRpcError
@@ -451,8 +452,16 @@ class LocalStream:
             "backend_error": None if connected else self._backend_error,
         }
 
+    def _env_file_path(self) -> Path | None:
+        """Return the `.env` the settings UI persists to: the instance's, else the one loaded from the cwd."""
+        if self._instance_path:
+            return Path(self._instance_path) / ".env"
+        if os.environ.get("REACHY_MINI_SKIP_DOTENV"):
+            return None
+        return Path(find_dotenv(usecwd=True) or Path.cwd() / ".env")
+
     def _persist_env_values(self, updates: dict[str, str]) -> None:
-        """Persist non-empty environment values in memory and in the instance `.env`."""
+        """Persist non-empty environment values in memory and in the `.env` from `_env_file_path`."""
         normalized_updates = {name: (value or "").strip() for name, value in updates.items()}
         normalized_updates = {name: value for name, value in normalized_updates.items() if value}
         if not normalized_updates:
@@ -465,11 +474,10 @@ class LocalStream:
                 pass
         refresh_runtime_config_from_env()
 
-        if not self._instance_path:
+        env_path = self._env_file_path()
+        if env_path is None:
             return
         try:
-            inst = Path(self._instance_path)
-            env_path = inst / ".env"
             lines = self._read_env_lines(env_path)
             for env_name, value in normalized_updates.items():
                 replaced = False
@@ -495,13 +503,13 @@ class LocalStream:
             logger.warning("Failed to persist %s: %s", ", ".join(sorted(normalized_updates)), e)
 
     def _remove_persisted_env_values(self, env_names: tuple[str, ...]) -> None:
-        """Remove keys from the instance `.env` without mutating the current runtime."""
+        """Remove keys from the `.env` from `_env_file_path` without mutating the current runtime."""
         normalized_names = tuple(sorted({name.strip() for name in env_names if name and name.strip()}))
-        if not normalized_names or not self._instance_path:
+        if not normalized_names:
             return
 
-        env_path = Path(self._instance_path) / ".env"
-        if not env_path.exists():
+        env_path = self._env_file_path()
+        if env_path is None or not env_path.exists():
             return
 
         try:

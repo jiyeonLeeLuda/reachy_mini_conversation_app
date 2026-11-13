@@ -778,6 +778,65 @@ def test_local_stream_persist_personality_clears_legacy_startup_env_overrides(tm
     assert applied_profiles == [None]
 
 
+def _cli_stream_in_tmp_cwd(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> LocalStream:
+    """Build a LocalStream as the CLI does (no instance path) with `.env` lookup confined to tmp_path."""
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.delenv("REACHY_MINI_SKIP_DOTENV", raising=False)
+    monkeypatch.delenv("REACHY_TEST_PERSISTED", raising=False)
+    monkeypatch.delenv("REACHY_TEST_KEPT", raising=False)
+    return LocalStream(MagicMock(), MagicMock())
+
+
+def test_persist_env_values_without_instance_path_updates_cwd_env(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Started from the CLI, settings-UI saves must land in the `.env` found from the cwd."""
+    env_path = tmp_path / ".env"
+    env_path.write_text("REACHY_TEST_KEPT=keep\nREACHY_TEST_PERSISTED=old\n", encoding="utf-8")
+    stream = _cli_stream_in_tmp_cwd(tmp_path, monkeypatch)
+
+    stream._persist_env_values({"REACHY_TEST_PERSISTED": "new"})
+
+    assert env_path.read_text(encoding="utf-8") == "REACHY_TEST_KEPT=keep\nREACHY_TEST_PERSISTED=new\n"
+
+
+def test_persist_env_values_without_instance_path_creates_cwd_env(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """With no `.env` anywhere, the first save creates one in the cwd so the next start picks it up."""
+    stream = _cli_stream_in_tmp_cwd(tmp_path, monkeypatch)
+    monkeypatch.setattr(console_mod, "find_dotenv", lambda usecwd=False: "")
+
+    stream._persist_env_values({"REACHY_TEST_PERSISTED": "new"})
+
+    assert "REACHY_TEST_PERSISTED=new" in (tmp_path / ".env").read_text(encoding="utf-8").splitlines()
+
+
+def test_persist_env_values_skips_file_when_dotenv_loading_is_disabled(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """REACHY_MINI_SKIP_DOTENV keeps CLI-mode saves in memory only."""
+    stream = _cli_stream_in_tmp_cwd(tmp_path, monkeypatch)
+    monkeypatch.setenv("REACHY_MINI_SKIP_DOTENV", "1")
+
+    stream._persist_env_values({"REACHY_TEST_PERSISTED": "new"})
+
+    assert not (tmp_path / ".env").exists()
+
+
+def test_remove_persisted_env_values_without_instance_path_edits_cwd_env(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Removing a key from the CLI must edit the `.env` found from the cwd."""
+    env_path = tmp_path / ".env"
+    env_path.write_text("REACHY_TEST_KEPT=keep\nREACHY_TEST_PERSISTED=old\n", encoding="utf-8")
+    stream = _cli_stream_in_tmp_cwd(tmp_path, monkeypatch)
+
+    stream._remove_persisted_env_values(("REACHY_TEST_PERSISTED",))
+
+    assert env_path.read_text(encoding="utf-8") == "REACHY_TEST_KEPT=keep\n"
+
+
 def test_local_stream_launch_waits_for_missing_hf_target_without_starting_media(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
