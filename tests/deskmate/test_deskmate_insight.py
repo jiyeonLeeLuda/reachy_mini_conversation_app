@@ -14,6 +14,7 @@ from deskmate.models import Bookmark, InsightNote, InsightCluster
 from deskmate.insight import load_insight, build_insight, render_note_body
 from deskmate.periods import Period, resolve_period
 from deskmate.settings import DeskmateSettings
+from deskmate.insight.render import related_links, note_links_enabled
 from deskmate.summarize.fetch import build_client
 
 
@@ -22,8 +23,11 @@ NOW = datetime(2026, 11, 6, 12, 0, tzinfo=timezone.utc)
 WEBRTC_ID = "7f3a9c2e-5b1d-4e8a-9c3f-2d7e6a1b4c05"
 ICE_ID = "a1b2c3d4-0001-4000-8000-000000000001"
 RUST_ID = "a1b2c3d4-0002-4000-8000-000000000002"
-WEBRTC_LINK = "[[2026-11-03 WebRTC 재접속 처리 패턴 7f3a9c]]"
-RUST_LINK = "[[2026-11-05 Rust async await 입문 1부 Future란 정리 a1b2c3]]"
+WEBRTC_LINK = "[WebRTC 재접속 처리 패턴](https://example.com/webrtc/reconnect)"
+RUST_LINK = '[Rust: async/await 입문 | 1부 "Future란?" <정리>](https://example.com/rust/async-intro)'
+WEBRTC_STEM = "2026-11-03 WebRTC 재접속 처리 패턴 7f3a9c"
+ICE_STEM = "2026-11-04 모바일 백그라운드 복귀 시 ICE 재협상 a1b2c3"
+RUST_STEM = "2026-11-05 Rust async await 입문 1부 Future란 정리 a1b2c3"
 
 
 @pytest.fixture(autouse=True)
@@ -91,6 +95,120 @@ def test_render_edge_cases() -> None:
     assert render_note_body(InsightNote("Default", date(2026, 11, 1), date(2026, 11, 7), ""), []) == (
         "# 위클리 인사이트 (2026-11-01 ~ 2026-11-07)\n"
     )
+
+
+def test_render_bookmark_lines_are_web_links_with_escaped_brackets() -> None:
+    """``- [title](url)``: brackets in the title are escaped, URLs with parentheses/spaces get ``<...>``, no URL = plain."""
+    day = date(2026, 11, 7)
+    bracketed = Bookmark("(펌)[뉴비가이드] 로컬 LLM [정리]", "https://arca.live/b/alpaca/1", "g1", "Default", day)
+    parens = Bookmark("Wiki", "https://en.wikipedia.org/wiki/Foo_(bar)", "g2", "Default", day)
+    spaced = Bookmark("Spaced", "https://example.com/a b", "g3", "Default", day)
+    no_url = Bookmark("URL 없음", "", "g4", "Default", day)
+    untitled = Bookmark("  ", "https://example.com/untitled", "g5", "Default", day)
+    note = InsightNote(
+        profile="Default",
+        since=day,
+        until=day,
+        generated_at="",
+        clusters=[InsightCluster("주제", ["g1", "g2", "g3", "g4", "g5", "ghost"], "s", "c", "q?")],
+    )
+    body = render_note_body(note, [bracketed, parens, spaced, no_url, untitled])
+    assert "- [(펌)\\[뉴비가이드\\] 로컬 LLM \\[정리\\]](https://arca.live/b/alpaca/1)\n" in body
+    assert "- [Wiki](<https://en.wikipedia.org/wiki/Foo_(bar)>)\n" in body
+    assert "- [Spaced](<https://example.com/a b>)\n" in body
+    assert "- URL 없음\n" in body
+    assert "- [https://example.com/untitled](https://example.com/untitled)\n" in body
+    assert "- (ghost)\n" in body
+    assert "[[" not in body
+
+
+def test_related_links_use_file_stems_and_skip_bookmarks_without_a_file(
+    settings: DeskmateSettings, period: Period
+) -> None:
+    """``related`` carries ``[[stem]]`` per file on disk (chronological input order, no duplicates, in-memory skipped)."""
+    bookmarks = sorted(bookmarks_in_period(settings, "Default", period), key=lambda b: b.date)
+    ghost = Bookmark("유령", "https://example.com/ghost", "ghost", "Default", date(2026, 11, 6))
+    assert related_links(bookmarks + [ghost] + bookmarks[:1]) == [
+        f"[[{WEBRTC_STEM}]]",
+        f"[[{ICE_STEM}]]",
+        f"[[{RUST_STEM}]]",
+    ]
+    assert related_links([]) == []
+
+
+def test_note_links_enabled_auto_on_off(tmp_path: Path) -> None:
+    """``auto`` follows the nearest ``.obsidian/`` above the note folder; ``on``/``off`` force it."""
+    vault = tmp_path / "vault"
+    (vault / ".obsidian").mkdir(parents=True)
+    inside = DeskmateSettings(bookmark_repo=vault / "bookmarks")
+    outside = DeskmateSettings(bookmark_repo=tmp_path / "elsewhere")
+    assert note_links_enabled(inside) is True
+    assert note_links_enabled(outside) is False
+    # DESKMATE_INSIGHTS_DIR decides when set: the notes live there, not in the repo.
+    assert (
+        note_links_enabled(DeskmateSettings(bookmark_repo=tmp_path / "elsewhere", insights_dir=vault / "in")) is True
+    )
+    assert (
+        note_links_enabled(DeskmateSettings(bookmark_repo=vault / "bookmarks", insights_dir=tmp_path / "out")) is False
+    )
+    assert note_links_enabled(DeskmateSettings(bookmark_repo=tmp_path / "elsewhere", note_links="on")) is True
+    assert note_links_enabled(DeskmateSettings(bookmark_repo=vault / "bookmarks", note_links="off")) is False
+    assert note_links_enabled(DeskmateSettings(bookmark_repo=None)) is False
+    with pytest.raises(ValueError):
+        DeskmateSettings(bookmark_repo=None, note_links="maybe")
+
+
+def test_related_front_matter_round_trips_and_is_omitted_outside_a_vault(
+    settings: DeskmateSettings, period: Period
+) -> None:
+    """A note with ``related`` writes one quoted ``[[link]]`` per line after ``unavailable`` and reads back; without it the key is absent."""
+    from deskmate.store import write_note
+
+    note, rendered = read_note(note_path(settings, "Default", period))
+    assert note.related == []  # fixture note predates ``related``: parser tolerates the missing key
+    bookmarks = bookmarks_in_period(settings, "Default", period)
+    note.related = related_links(bookmarks)
+    path = settings.resolved_insights_dir / "Default" / "related.md"
+    write_note(note, rendered, path)
+    front_matter = path.read_text(encoding="utf-8").split("---")[1]
+    related_block = "related:\n" + "".join(f'  - "{link}"\n' for link in note.related)
+    assert f"unavailable: [{RUST_ID}]\n{related_block}clusters:\n" in front_matter
+    reloaded, body = read_note(path)
+    assert reloaded.related == note.related and body == rendered
+    assert reloaded.clusters == note.clusters and reloaded.bookmark_ids == note.bookmark_ids
+
+    reloaded.related = []
+    write_note(reloaded, body, path)
+    assert "related" not in path.read_text(encoding="utf-8").split("---")[1]
+
+
+def test_build_insight_writes_related_only_inside_a_vault(
+    tmp_path: Path,
+    fixtures_dir: Path,
+    fake_llm_responses: dict[str, Any],
+    period: Period,
+    offline_client: httpx.Client,
+) -> None:
+    """The batch adds ``related`` when the repo is under ``.obsidian/`` (auto) or forced on, never when off/outside."""
+    import shutil
+
+    def build(repo: Path, **overrides: Any) -> str:
+        shutil.copytree(fixtures_dir / "repo_sample", repo)
+        repo_settings = DeskmateSettings(
+            bookmark_repo=repo, chrome_profiles=("Default",), default_profile="Default", **overrides
+        )
+        note = build_insight(
+            repo_settings, FakeLLM(fake_llm_responses), "Default", period, now=NOW, client=offline_client
+        )
+        return Path(note.path).read_text(encoding="utf-8").split("---")[1]
+
+    vault = tmp_path / "vault"
+    (vault / ".obsidian").mkdir(parents=True)
+    in_vault = build(vault / "bookmarks")
+    assert f'  - "[[{WEBRTC_STEM}]]"\n  - "[[{ICE_STEM}]]"\n  - "[[{RUST_STEM}]]"\n' in in_vault
+    assert "related" not in build(tmp_path / "plain")
+    assert "related" in build(tmp_path / "forced", note_links="on")
+    assert "related" not in build(vault / "muted", note_links="off")
 
 
 def test_build_insight_empty_period_writes_nothing(settings: DeskmateSettings, offline_client: httpx.Client) -> None:

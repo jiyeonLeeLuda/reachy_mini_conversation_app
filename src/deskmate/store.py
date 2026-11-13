@@ -31,7 +31,7 @@ from deskmate.models import (
 )
 from deskmate.periods import Period
 from deskmate.settings import DeskmateSettings
-from deskmate.frontmatter import join_frontmatter, split_frontmatter
+from deskmate.frontmatter import BlockList, join_frontmatter, split_frontmatter
 
 
 logger = logging.getLogger(__name__)
@@ -350,6 +350,7 @@ def note_from_text(text: str, path: Path | None = None) -> tuple[InsightNote, st
         if isinstance(item, dict)
     ]
     note.unavailable = [str(x) for x in data.get("unavailable") or []]
+    note.related = [str(x) for x in data.get("related") or []]  # absent in notes written outside a vault / before M10
     note.bookmark_ids = [str(x) for x in data.get("bookmark_ids") or []]
     note.complete = _parse_bool(data.get("complete", True))
     note.pending = [str(x) for x in data.get("pending") or []]
@@ -369,8 +370,10 @@ def note_to_text(note: InsightNote, rendered_body: str) -> str:
         "complete": note.complete,
         "bookmark_ids": list(note.bookmark_ids),
         "unavailable": list(note.unavailable),
-        "clusters": [cluster.to_dict() for cluster in note.clusters],
     }
+    if note.related:  # Obsidian graph/backlink edges; only when the note sits in a vault (render.note_links_enabled)
+        data["related"] = BlockList(note.related)
+    data["clusters"] = [cluster.to_dict() for cluster in note.clusters]
     if note.pending:  # only partial notes carry the list (complete notes stay byte-compatible with M4)
         data["pending"] = list(note.pending)
     body = rendered_body.rstrip("\n") + "\n"

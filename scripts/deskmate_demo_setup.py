@@ -11,7 +11,7 @@ one ready insight note for 2026-10-31..2026-11-06) and the fake Chrome
 emulator without any network or LLM key (M1 대화 품질 선검증).
 
 The same thing is available as the "데모 데이터 준비" button in the settings
-UI (``reachy-mini-conversation-app --ui`` → Settings → DeskMate).
+UI (``reachy-mini-conversation-app --ui`` → Settings → Bookmark Insight).
 """
 
 from __future__ import annotations

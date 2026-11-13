@@ -174,6 +174,7 @@ def test_default_user_data_dir_per_platform(monkeypatch: pytest.MonkeyPatch, tmp
             "2026-11-05 Rust async await 입문 1부 Future란 정리 7f3a9c.md",
         ),
         ("a\\b*c?d", "2026-11-05 a bcd 7f3a9c.md"),
+        ("[뉴비가이드] 로컬 LLM #정리 ^블록 | 별명", "2026-11-05 뉴비가이드 로컬 LLM 정리 블록 별명 7f3a9c.md"),
         ("  끝에 점과 공백...  ", "2026-11-05 끝에 점과 공백 7f3a9c.md"),
         ("CON", "2026-11-05 CON_ 7f3a9c.md"),
         ("lpt1", "2026-11-05 lpt1_ 7f3a9c.md"),
@@ -182,8 +183,10 @@ def test_default_user_data_dir_per_platform(monkeypatch: pytest.MonkeyPatch, tmp
     ],
 )
 def test_build_filename_table(title: str, expected: str) -> None:
-    """Forbidden characters dropped, separators become spaces, reserved names suffixed, empty → untitled."""
+    """Windows-forbidden and Obsidian link characters dropped, separators become spaces, reserved names suffixed, empty → untitled."""
     assert build_filename(date(2026, 11, 5), title, GUID_WEBRTC) == expected
+    stem = expected[:-3]
+    assert not any(char in stem for char in "[]#^|"), "a [[wikilink]] to this file would break"
 
 
 def test_build_filename_normalizes_nfd_and_caps_length() -> None:

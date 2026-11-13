@@ -35,6 +35,7 @@ ENV_DAILY_MAX_SUMMARIES = "DESKMATE_DAILY_MAX_SUMMARIES"
 ENV_CALL_INTERVAL_S = "DESKMATE_CALL_INTERVAL_S"
 ENV_GEMINI_API_KEY = "GEMINI_API_KEY"  # shared with the Gemini Live backend
 ENV_OBSIDIAN_CONFIG = "DESKMATE_OBSIDIAN_CONFIG"  # overrides the OS default obsidian.json (setup dashboard only)
+ENV_NOTE_LINKS = "DESKMATE_NOTE_LINKS"  # auto | on | off: Obsidian ``related`` links in insight note front matter
 
 # --- defaults (tuning constants; keep in sync with design doc §2.3) ---
 DEFAULT_EXCLUDE_FOLDERS: tuple[str, ...] = ("private",)
@@ -58,6 +59,11 @@ DEFAULT_BODY_MAX_CHARS = 20_000
 DEFAULT_BATCH_MAX_SUMMARIES = 20
 DEFAULT_DAILY_MAX_SUMMARIES = 100  # free-tier protection; the rest waits for tomorrow (M7 backfill)
 DEFAULT_CALL_INTERVAL_S = 6.0  # seconds between batch-model calls (requests-per-minute protection)
+NOTE_LINKS_AUTO = "auto"  # write ``related`` [[links]] only when the note folder sits inside an Obsidian vault
+NOTE_LINKS_ON = "on"
+NOTE_LINKS_OFF = "off"
+NOTE_LINKS_CHOICES: tuple[str, ...] = (NOTE_LINKS_AUTO, NOTE_LINKS_ON, NOTE_LINKS_OFF)
+DEFAULT_NOTE_LINKS = NOTE_LINKS_AUTO
 INSIGHTS_DIRNAME = "insights"
 DESKMATE_STATE_DIRNAME = ".deskmate"
 USAGE_LOG_FILENAME = "usage.jsonl"
@@ -102,6 +108,11 @@ def _env_path(name: str) -> Path | None:
     return Path(raw).expanduser() if raw else None
 
 
+def _env_choice(name: str, choices: tuple[str, ...], default: str) -> str:
+    raw = (os.getenv(name) or "").strip().lower()
+    return raw if raw in choices else default
+
+
 @dataclass(frozen=True)
 class DeskmateSettings:
     """Resolved DeskMate configuration (design doc §2.3)."""
@@ -124,7 +135,13 @@ class DeskmateSettings:
     batch_max_summaries: int = DEFAULT_BATCH_MAX_SUMMARIES
     daily_max_summaries: int = DEFAULT_DAILY_MAX_SUMMARIES
     call_interval_s: float = DEFAULT_CALL_INTERVAL_S
+    note_links: str = DEFAULT_NOTE_LINKS  # auto | on | off (NOTE_LINKS_CHOICES)
     gemini_api_key: str | None = field(default=None, repr=False)
+
+    def __post_init__(self) -> None:
+        """Reject values outside the documented choices (``load_settings`` falls back to the default first)."""
+        if self.note_links not in NOTE_LINKS_CHOICES:
+            raise ValueError(f"{ENV_NOTE_LINKS} must be one of {', '.join(NOTE_LINKS_CHOICES)}: {self.note_links!r}")
 
     # --- derived paths -------------------------------------------------------
     @property
@@ -147,6 +164,11 @@ class DeskmateSettings:
     def resolved_insights_dir(self) -> Path:
         """Root of ``insights/<profile>/<since>_<until>.md``."""
         return self.insights_dir if self.insights_dir is not None else self.require_repo() / INSIGHTS_DIRNAME
+
+    @property
+    def note_links_probe_dir(self) -> Path | None:
+        """Folder whose ancestors decide ``note_links: auto``: the insights dir when set, else the repo (None = unconfigured)."""
+        return self.insights_dir if self.insights_dir is not None else self.bookmark_repo
 
     @property
     def state_dir(self) -> Path:
@@ -212,5 +234,6 @@ def load_settings(environ: dict[str, str] | None = None) -> DeskmateSettings:
         batch_max_summaries=_env_int(ENV_BATCH_MAX_SUMMARIES, DEFAULT_BATCH_MAX_SUMMARIES),
         daily_max_summaries=_env_int(ENV_DAILY_MAX_SUMMARIES, DEFAULT_DAILY_MAX_SUMMARIES),
         call_interval_s=_env_float(ENV_CALL_INTERVAL_S, DEFAULT_CALL_INTERVAL_S),
+        note_links=_env_choice(ENV_NOTE_LINKS, NOTE_LINKS_CHOICES, DEFAULT_NOTE_LINKS),
         gemini_api_key=(os.getenv(ENV_GEMINI_API_KEY) or "").strip() or None,
     )

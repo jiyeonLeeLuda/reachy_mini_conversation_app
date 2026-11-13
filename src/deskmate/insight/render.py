@@ -3,13 +3,22 @@
 The body is rendered from the JSON-schema fields only; LLM text appears in
 exactly four places per cluster (topic, summary, 관계, 질문) and is flattened
 to one line so it can never open a new markdown section.
+
+Bookmark lines are plain markdown web links (``- [title](url)``) so the note
+reads the same in any markdown viewer. Obsidian ``[[wikilinks]]`` to the
+bookmark files go to the front matter ``related`` list instead (graph and
+backlink edges), and only when the note sits inside an Obsidian vault
+(``note_links_enabled``).
 """
 
 from __future__ import annotations
 from pathlib import Path
+from dataclasses import dataclass
 
 from deskmate.store import nfc
 from deskmate.models import Bookmark, InsightNote
+from deskmate.obsidian import find_vault
+from deskmate.settings import NOTE_LINKS_ON, NOTE_LINKS_OFF, DeskmateSettings
 
 
 NOTE_TITLE_PREFIX = "# 위클리 인사이트"
@@ -19,25 +28,73 @@ PENDING_LINE = "아직 요약하지 않은 북마크 {count}건"
 PENDING_MAX_TITLES = 10  # titles listed under the heading; the rest is "… 외 N건"
 CORRELATION_LABEL = "**관계**"
 QUESTION_LABEL = "**질문**"
+_URL_NEEDS_ANGLE_BRACKETS = frozenset(" ()")  # a bare markdown URL ends at these; ``<url>`` keeps it whole
+
+
+@dataclass(frozen=True)
+class LinkTarget:
+    """What a bookmark line and a ``related`` entry need from one bookmark."""
+
+    title: str
+    url: str
+    stem: str | None  # file name without ``.md`` once loaded from disk; None = not on disk (no [[link]])
 
 
 def _one_line(text: str) -> str:
     return " ".join(text.split())
 
 
-def link_targets(bookmarks: list[Bookmark]) -> dict[str, str]:
-    """Map guid → Obsidian link stem (file name without ``.md``) for bookmarks loaded from disk."""
-    targets: dict[str, str] = {}
+def _md_link_text(title: str) -> str:
+    """Flatten ``title`` and escape the brackets that would end the link text."""
+    return _one_line(title).replace("[", "\\[").replace("]", "\\]")
+
+
+def _md_url(url: str) -> str:
+    """Return ``url`` as a markdown link destination (angle brackets when a space or parenthesis would cut it)."""
+    url = url.strip()
+    return f"<{url}>" if any(ch in _URL_NEEDS_ANGLE_BRACKETS for ch in url) else url
+
+
+def link_targets(bookmarks: list[Bookmark]) -> dict[str, LinkTarget]:
+    """Map guid → title, url and Obsidian link stem (None when the bookmark has no file on disk)."""
+    targets: dict[str, LinkTarget] = {}
     for bookmark in bookmarks:
-        if bookmark.path is None:
-            continue
-        targets[bookmark.guid] = nfc(Path(bookmark.path).stem)
+        stem = nfc(Path(bookmark.path).stem) if bookmark.path is not None else None
+        targets[bookmark.guid] = LinkTarget(title=bookmark.title, url=bookmark.url, stem=stem)
     return targets
 
 
-def _link_line(bookmark_id: str, targets: dict[str, str]) -> str:
-    stem = targets.get(bookmark_id)
-    return f"- [[{stem}]]" if stem else f"- ({bookmark_id})"
+def _link_line(bookmark_id: str, targets: dict[str, LinkTarget]) -> str:
+    target = targets.get(bookmark_id)
+    if target is None:
+        return f"- ({bookmark_id})"
+    text = _md_link_text(target.title) or target.url.strip() or bookmark_id
+    if not target.url.strip():
+        return f"- {text}"
+    return f"- [{text}]({_md_url(target.url)})"
+
+
+def related_links(bookmarks: list[Bookmark]) -> list[str]:
+    """``"[[<stem>]]"`` for every bookmark that has a file on disk, in the given order, without duplicates."""
+    links: list[str] = []
+    for target in link_targets(bookmarks).values():
+        if target.stem is not None and (link := f"[[{target.stem}]]") not in links:
+            links.append(link)
+    return links
+
+
+def note_links_enabled(settings: DeskmateSettings) -> bool:
+    """Whether notes get ``related`` Obsidian links: ``on``/``off`` force it; ``auto`` = the note folder is inside a vault.
+
+    ``auto`` probes the insights dir when ``DESKMATE_INSIGHTS_DIR`` is set
+    (that is where the notes live), otherwise the bookmark repo.
+    """
+    if settings.note_links == NOTE_LINKS_ON:
+        return True
+    if settings.note_links == NOTE_LINKS_OFF:
+        return False
+    probe = settings.note_links_probe_dir
+    return probe is not None and find_vault(probe) is not None
 
 
 def render_pending_section(note: InsightNote, bookmarks: list[Bookmark]) -> list[str]:
@@ -55,10 +112,10 @@ def render_pending_section(note: InsightNote, bookmarks: list[Bookmark]) -> list
 
 
 def render_note_body(note: InsightNote, bookmarks: list[Bookmark]) -> str:
-    """Render the human-readable Obsidian body (clusters, correlations, questions, ``[[links]]``).
+    """Render the human-readable body (clusters, correlations, questions, ``- [title](url)`` bookmark lines).
 
     A partial note (M7) adds ``## 미요약`` with the not-yet-summarized titles
-    before ``## 본문 미확보``.
+    before ``## 본문 미확보``. Ids without a bookmark degrade to ``- (id)``.
     """
     targets = link_targets(bookmarks)
     lines: list[str] = [f"{NOTE_TITLE_PREFIX} ({note.since.isoformat()} ~ {note.until.isoformat()})"]

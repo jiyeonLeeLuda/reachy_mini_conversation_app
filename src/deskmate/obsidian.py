@@ -1,10 +1,10 @@
 """Obsidian vault discovery for the setup dashboard.
 
-Insight notes link bookmarks with ``[[wikilinks]]``, which only resolve when the
-bookmark repository lives inside an Obsidian vault (a folder with ``.obsidian/``).
-These helpers read Obsidian's global ``obsidian.json`` to list the user's vaults
-and tell whether a given repository path sits inside one. Pure functions, no app
-imports.
+Insight notes add ``related`` ``[[wikilinks]]`` to their front matter (graph and
+backlink edges) only when they live inside an Obsidian vault (a folder with
+``.obsidian/``); see ``deskmate.insight.render.note_links_enabled``. These
+helpers read Obsidian's global ``obsidian.json`` to list the user's vaults and
+tell whether a given path sits inside one. Pure functions, no app imports.
 """
 
 from __future__ import annotations

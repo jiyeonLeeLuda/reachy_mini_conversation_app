@@ -112,6 +112,9 @@ class InsightNote:
     generated_at: str  # ISO 8601
     clusters: list[InsightCluster] = field(default_factory=list)
     unavailable: list[str] = field(default_factory=list)  # bookmark guids without body (fetch_failed)
+    # Obsidian ``"[[<bookmark file stem>]]"`` links for the graph/backlinks; front matter only,
+    # written when the note lives in an Obsidian vault (settings ``note_links``), else empty = key omitted.
+    related: list[str] = field(default_factory=list)
     bookmark_ids: list[str] = field(default_factory=list)  # every bookmark of the period (seen or not)
     complete: bool = True  # False while a backfill is still running (M7)
     pending: list[str] = field(default_factory=list)  # guids not summarized yet (M7 partial note); empty = complete

@@ -1,9 +1,16 @@
 """Bookmark file naming and URL keys (§2.4 파일명 규칙).
 
 ``bookmarks/<profile>/YYYY/YYYY-MM-DD <title> <guid[:6]>.md`` — the title
-part is NFC-normalized, stripped of Windows-forbidden characters, kept clear
-of reserved device names and trimmed so the name stays under
-``FILENAME_MAX_CHARS`` and the full path under ``PATH_MAX_CHARS``.
+part is NFC-normalized, stripped of Windows-forbidden and Obsidian
+link-breaking characters, kept clear of reserved device names and trimmed so
+the name stays under ``FILENAME_MAX_CHARS`` and the full path under
+``PATH_MAX_CHARS``.
+
+The stem is what insight notes put inside ``[[...]]`` (front matter
+``related``), so ``[``, ``]``, ``#`` (heading anchor), ``^`` (block anchor)
+and ``|`` (alias separator) can never appear in it. Files created before this
+rule keep their names: the guid in the name is what sync matches on, and a
+rename would break links already written.
 """
 
 import unicodedata
@@ -18,7 +25,9 @@ FILENAME_MAX_CHARS = 120
 PATH_MAX_CHARS = 240
 GUID_PREFIX_CHARS = 6
 UNTITLED = "untitled"
-FORBIDDEN_CHARS = frozenset(':*?"<>|')
+WINDOWS_FORBIDDEN_CHARS = frozenset(':*?"<>|')
+OBSIDIAN_LINK_CHARS = frozenset("[]#^|")  # would end or split a [[wikilink]] to the file
+FORBIDDEN_CHARS = WINDOWS_FORBIDDEN_CHARS | OBSIDIAN_LINK_CHARS
 SEPARATOR_CHARS = frozenset("/\\")  # become a space so "async/await" stays readable
 RESERVED_NAMES = frozenset(
     {"CON", "PRN", "AUX", "NUL", *(f"COM{n}" for n in range(1, 10)), *(f"LPT{n}" for n in range(1, 10))}

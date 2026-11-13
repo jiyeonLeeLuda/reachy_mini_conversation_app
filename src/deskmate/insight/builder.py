@@ -31,7 +31,7 @@ from deskmate.models import Bookmark, InsightNote, InsightCluster
 from deskmate.periods import Period
 from deskmate.settings import DeskmateSettings
 from deskmate.summarize import summarize_bookmarks
-from deskmate.insight.render import render_note_body
+from deskmate.insight.render import related_links, render_note_body, note_links_enabled
 from deskmate.summarize.usage import log_usage
 from deskmate.summarize.runner import iso_utc, local_date, resolve_now, load_daily_count
 from deskmate.summarize.sections import summary_text
@@ -175,6 +175,7 @@ def build_insight(
             generated_at=iso_utc(moment if now is not None else resolve_now(None)),
             clusters=clusters,
             unavailable=[bookmark.guid for bookmark in seen if bookmark.summary_status != "ok"],
+            related=related_links(bookmarks) if note_links_enabled(settings) else [],
             bookmark_ids=[bookmark.guid for bookmark in bookmarks],
             complete=not pending,
             pending=[bookmark.guid for bookmark in pending],

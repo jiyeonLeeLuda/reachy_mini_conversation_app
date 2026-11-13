@@ -14,6 +14,12 @@ import yaml
 
 
 FENCE = "---"
+
+
+class BlockList(list[Any]):
+    """A list of scalars that must be written one ``- item`` per line (Obsidian shows link lists this way)."""
+
+
 _ISO_DATE = re.compile(r"\d{4}-\d{2}-\d{2}")
 _NEEDS_QUOTE_CHARS = set(":#{}[],&*?|<>=!%@`\"'\\")
 
@@ -44,6 +50,8 @@ def _is_block(value: Any) -> bool:
     """Return whether ``value`` must be rendered on its own indented lines."""
     if isinstance(value, dict):
         return bool(value)
+    if isinstance(value, BlockList):
+        return bool(value)
     if isinstance(value, list):
         return bool(value) and any(isinstance(item, (dict, list)) for item in value)
     return False
@@ -63,7 +71,7 @@ def _render_value(value: Any, indent: int = 0) -> str:
     if isinstance(value, list):
         if not value:
             return "[]"
-        if all(not isinstance(item, (dict, list)) for item in value):
+        if not isinstance(value, BlockList) and all(not isinstance(item, (dict, list)) for item in value):
             return "[" + ", ".join(_scalar(item) for item in value) + "]"
         lines = []
         for item in value:

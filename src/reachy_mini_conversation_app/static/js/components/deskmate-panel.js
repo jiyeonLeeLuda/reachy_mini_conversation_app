@@ -76,7 +76,7 @@ export function buildDeskmateSection({ signal } = {}) {
   const repoHelp = h(
     "p",
     { class: "settings-hint" },
-    "옵시디언(Obsidian)은 이런 md 파일을 노트처럼 보여 주고 [[링크]]를 열어 주는 무료 메모 앱입니다. 쓰고 있다면 볼트(노트 폴더) 안의 폴더를 권하고, 쓰지 않는다면 아무 폴더나 괜찮습니다 (노트는 일반 md 파일)."
+    "옵시디언(Obsidian)은 이런 md 파일을 노트처럼 보여 주고 [[링크]]로 그래프를 그려 주는 무료 메모 앱입니다. 쓰고 있다면 볼트(노트 폴더) 안의 폴더를 권하고(노트와 북마크가 그래프에서 이어짐), 쓰지 않는다면 아무 폴더나 괜찮습니다 (노트는 웹 링크가 담긴 일반 md 파일)."
   );
   const chromeInput = h("input", {
     type: "text",
@@ -232,7 +232,7 @@ export function buildDeskmateSection({ signal } = {}) {
       info.exists ? (info.writable ? "쓰기 가능" : "쓰기 불가") : null,
       `북마크 md ${info.bookmark_count}개`,
       `인사이트 노트 ${info.insight_count}개`,
-      info.in_obsidian_vault ? `옵시디언 볼트 안 (${info.vault_name})` : "볼트 밖: 노트 안의 [[링크]]는 옵시디언에서 열리지 않습니다",
+      info.in_obsidian_vault ? `옵시디언 볼트 안 (${info.vault_name})` : "볼트 밖: 노트에 옵시디언 그래프용 연결(related)은 적지 않습니다 (웹 링크는 그대로)",
     ]
       .filter(Boolean)
       .join(" · ");
