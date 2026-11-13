@@ -63,9 +63,17 @@ SYNC_MIN_INTERVAL_S = 30.0  # read operations re-sync Chrome at most this often 
 DEFAULT_LIMIT = 20  # list_bookmarks
 MAX_LIMIT = 200
 ALLOWED_REASONS: tuple[str, ...] = ("explicit", "confirmed")  # finish_insight; "auto" is the host's
+SETTINGS_URL = "http://127.0.0.1:7860/#/settings"  # the app's fixed UI port; the host must run with --ui
+SETTINGS_SECTION = "Bookmark Insight"
+SETUP_STEPS: tuple[str, ...] = ("프로필 탐색", "북마크 저장소 폴더 → 폴더 만들기·적용", ".env에 적용", "동기화 실행")
 
 # --- next_action texts (§3.1 / §3.2, tuned per profile prompt later) ----------
-NOT_CONFIGURED_NEXT_ACTION = "사용자에게 북마크 저장소가 설정되지 않았다고 짧게 말하라"
+NOT_CONFIGURED_NEXT_ACTION = (
+    "북마크 기능이 아직 설정되지 않았다. 북마크 내용을 기억이나 추측으로 말하지 말고, 두 문장 안에 이렇게만 안내하라: "
+    "브라우저에서 127.0.0.1 7860 설정 페이지를 열면 Bookmark Insight 칸에 버튼 네 개(프로필 탐색, 폴더 만들기·적용, "
+    ".env에 적용, 동기화 실행)가 있으니 차례로 누르면 되고, 재시작은 필요 없으니 끝나면 다시 말해 달라고 하라. "
+    "한국어로만 말한다."
+)
 UNKNOWN_PROFILE_NEXT_ACTION = "쓸 수 있는 프로필 이름을 말해 주라"
 READY_NEXT_ACTION = (
     "노트가 준비됐다. 발화는 반드시 이 결과의 clusters를 근거로 하고, 기억이나 추측으로 북마크 내용을 "
@@ -202,9 +210,13 @@ def building(profile: str, period: Period) -> Iterator[None]:
 
 
 def not_configured_error() -> dict[str, Any]:
-    """Error returned by every operation when the bookmark repository is not set."""
+    """Error returned by every operation when the bookmark repository is not set; points at the settings page."""
     return {
         "error": f"deskmate not configured: set {ENV_BOOKMARK_REPO}",
+        "settings_url": SETTINGS_URL,
+        "settings_section": SETTINGS_SECTION,
+        "setup_steps": list(SETUP_STEPS),
+        "restart_required": False,  # settings are re-read on every call
         "next_action": NOT_CONFIGURED_NEXT_ACTION,
     }
 

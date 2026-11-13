@@ -192,6 +192,7 @@ class FinishInsight(Tool):  # tools/finish_insight.py
 - **설정은 `src/deskmate/settings.py`가 단일 출처다** (`DESKMATE_*` 환경변수). 패키지가 앱을
   모르게 하기 위해 `config.py`는 수정하지 않았고, `.env.example`에 7절을 추가했다.
 - 도구는 `load_settings()`를 호출 시점에 읽는다 (테스트에서 환경변수로 저장소 경로를 바꾸기 위함).
+- 저장소 미설정(`DESKMATE_BOOKMARK_REPO` 없음)이면 다섯 도구 모두 `{"error": "deskmate not configured: ..."}`에 `settings_url`(`http://127.0.0.1:7860/#/settings`, `--ui` 필요)·`settings_section`(`Bookmark Insight`)·`setup_steps`(대시보드 버튼 4개)·`restart_required: false`를 함께 돌려준다 (2026-11-13). 설정 UI의 적용은 `os.environ`을 먼저 갱신하므로 다음 호출부터 재시작 없이 동작한다.
 - 자동 종료(`reason="auto"`)는 2.2대로 LLM 인자가 아니다. `finish_insight`는 `auto`를 받으면
   오류를 돌려준다.
 
@@ -408,6 +409,9 @@ summarized_at: 2026-11-08
   인자로 전달한다. 말하지 않으면 생략한다 (기본 프로필). 프로필 이름을 추측하지 않는다.
   도구가 `{"error": "unknown profile"}`를 돌려주면 `available`의 이름을 말해 주고 고르게
   한다.
+- **미설정 안내**: 도구 결과에 `settings_url`이 오면 기억으로 북마크 얘기를 하지 않고, `next_action`대로
+  설정 페이지(127.0.0.1 7860, Bookmark Insight 칸의 버튼 네 개)로 안내한 뒤 그 주제를 끝낸다. 재시작은
+  필요 없으므로 사용자가 설정을 마쳤다고 하면 `get_insight`를 다시 호출한다.
 - **금지**: 읽었는지 묻기, 저장만 하고 안 읽었다고 지적하기, 북마크 개수로 평가하기,
   "왜 저장했는지" 묻기 (상관관계는 봇이 본문에서 추론한다).
 - **빈 기간 멘트**: "지난 일주일 동안은 새로 저장한 게 없네. 요즘 관심 있는 건 뭐야?"

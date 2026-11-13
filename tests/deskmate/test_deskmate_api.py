@@ -203,12 +203,30 @@ def test_api_finish_insight_attaches_a_host_transcript(env: Path) -> None:
 
 
 def test_api_never_raises_on_unconfigured_repo(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Without the repo path every operation answers with the configuration error."""
+    """Without the repo path every operation answers with the configuration error and the settings-page guide."""
     monkeypatch.delenv("DESKMATE_BOOKMARK_REPO", raising=False)
     for name in ("get_insight", "build_insight", "list_bookmarks"):
         result = getattr(api, name)()
-        assert "DESKMATE_BOOKMARK_REPO" in result["error"] and result["next_action"]
+        assert "DESKMATE_BOOKMARK_REPO" in result["error"]
+        assert result["settings_url"] == api.SETTINGS_URL
+        assert result["settings_section"] == "Bookmark Insight"
+        assert len(result["setup_steps"]) == 4
+        assert result["restart_required"] is False
+        assert "127.0.0.1 7860" in result["next_action"] and "Bookmark Insight" in result["next_action"]
     assert "DESKMATE_BOOKMARK_REPO" in api.get_bookmark(id="x")["error"]
+
+
+def test_api_picks_up_the_repo_set_after_startup(
+    repo: Path, chrome_user_data: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Configuring the repo from the settings page needs no restart: the next call already reads it."""
+    monkeypatch.delenv("DESKMATE_BOOKMARK_REPO", raising=False)
+    assert "settings_url" in api.get_insight(days=7)
+    monkeypatch.setenv("DESKMATE_BOOKMARK_REPO", str(repo))
+    monkeypatch.setenv("DESKMATE_CHROME_USER_DATA_DIR", str(chrome_user_data))
+    monkeypatch.setenv("DESKMATE_CHROME_PROFILES", "Default")
+    result = api.get_insight(days=7)
+    assert "error" not in result and result["status"] == "ready"
 
 
 # --- MCP server --------------------------------------------------------------------------------------
