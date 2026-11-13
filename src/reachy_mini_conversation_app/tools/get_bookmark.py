@@ -1,14 +1,14 @@
-"""Return one bookmark's front matter and summary by guid (design doc §2.2). Wraps ``deskmate.api.get_bookmark``."""
+"""Return one bookmark's front matter and summary by guid (design doc §2.2). Wraps ``bookmark_insight.api.get_bookmark``."""
 
 from __future__ import annotations
 import time
 import logging
 from typing import Any
 
-from deskmate import api
-from deskmate.api import BOOKMARK_NEXT_ACTION, extract_summary
+from bookmark_insight import api
+from bookmark_insight.api import BOOKMARK_NEXT_ACTION, extract_summary
 from reachy_mini_conversation_app.tools.core_tools import Tool, ToolDependencies
-from reachy_mini_conversation_app.tools._deskmate_common import elapsed_ms
+from reachy_mini_conversation_app.tools._bookmark_insight_common import elapsed_ms
 
 
 logger = logging.getLogger(__name__)

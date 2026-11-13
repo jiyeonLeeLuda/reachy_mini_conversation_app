@@ -2,8 +2,8 @@
 
 const DEFAULT_TIMEOUT_MS = 8000;
 const TOOL_SPACE_TIMEOUT_MS = 60000;
-// First DeskMate sync can touch hundreds of files (plus Windows write retries).
-export const DESKMATE_LONG_TIMEOUT_MS = 180000;
+// First Bookmark Insight sync can touch hundreds of files (plus Windows write retries).
+export const BOOKMARK_INSIGHT_LONG_TIMEOUT_MS = 180000;
 
 const RPC_URL = `${location.protocol === "https:" ? "wss:" : "ws:"}//${location.host}/rpc`;
 
@@ -158,16 +158,16 @@ export const saveProfileTools = (profile, enabledTools) =>
 export const resetProfileTools = (profile) =>
   rpcCall("profile_tools.reset", { profile });
 
-// DeskMate first-time setup (deskmate.* methods, M10).
-export const getDeskmateStatus = () => rpcCall("deskmate.status");
-export const discoverDeskmateProfiles = (params = {}) => rpcCall("deskmate.discover", params);
-export const runDeskmateSync = (params = {}) =>
-  rpcCall("deskmate.sync", params, { timeoutMs: DESKMATE_LONG_TIMEOUT_MS });
-export const setDeskmateRepo = (path, create = false) =>
-  rpcCall("deskmate.repo.set", { path, create });
-export const applyDeskmateEnv = (values) => rpcCall("deskmate.env.apply", values);
-export const setupDeskmateDemo = (target) =>
-  rpcCall("deskmate.demo_setup", { target }, { timeoutMs: DESKMATE_LONG_TIMEOUT_MS });
+// Bookmark Insight first-time setup (bookmark_insight.* methods, M10).
+export const getBookmarkInsightStatus = () => rpcCall("bookmark_insight.status");
+export const discoverBookmarkInsightProfiles = (params = {}) => rpcCall("bookmark_insight.discover", params);
+export const runBookmarkInsightSync = (params = {}) =>
+  rpcCall("bookmark_insight.sync", params, { timeoutMs: BOOKMARK_INSIGHT_LONG_TIMEOUT_MS });
+export const setBookmarkInsightRepo = (path, create = false) =>
+  rpcCall("bookmark_insight.repo.set", { path, create });
+export const applyBookmarkInsightEnv = (values) => rpcCall("bookmark_insight.env.apply", values);
+export const setupBookmarkInsightDemo = (target) =>
+  rpcCall("bookmark_insight.demo_setup", { target }, { timeoutMs: BOOKMARK_INSIGHT_LONG_TIMEOUT_MS });
 
 export const getVisionSettings = async () => {
   const res = await fetch("/api/vision/settings");

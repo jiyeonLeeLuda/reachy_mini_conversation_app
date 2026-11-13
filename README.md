@@ -66,7 +66,7 @@ REACHY_MINI_HOST=192.168.0.144
 REACHY_MINI_AUTO_START_DAEMON=1
 ```
 
-   Gemini 백엔드로 DeskMate(위클리 인사이트)를 시뮬레이터에서 돌리는 최소 구성은 세 줄입니다
+   Gemini 백엔드로 Bookmark Insight(북마크 인사이트)를 시뮬레이터에서 돌리는 최소 구성은 세 줄입니다
    (코드 기본값은 `hf`, `.env.example` 기본값은 `openai`라서 백엔드를 꼭 적어야 합니다):
 
 ```env
@@ -88,7 +88,7 @@ reachy-mini-conversation-app --ui --no-camera    # 카메라가 없는 PC
 
 5. 대화 → **"종료해 줘"** → 취침 대기 → **"깨어나 리치미니"** → 대화 재개.
    끝낼 때는 콘솔에서 `Ctrl+C`.
-6. (선택) Chrome 북마크 위클리 인사이트는 아래 [Bookmark Insight](#bookmark-insight-chrome-북마크-위클리-인사이트) 참고.
+6. (선택) Chrome 북마크 인사이트는 아래 [Bookmark Insight](#bookmark-insight-chrome-북마크-인사이트) 참고.
 
 > [!NOTE]
 > Windows에서는 실행 전 `$env:PYTHONUTF8 = "1"`을 설정하면 한국어 로그 깨짐을 방지할 수 있습니다.
@@ -121,13 +121,13 @@ mjpython "$(which reachy-mini-daemon)" --sim
 reachy-mini-daemon --sim
 ```
 
-## Bookmark Insight (Chrome 북마크 위클리 인사이트)
+## Bookmark Insight (Chrome 북마크 인사이트)
 
 Chrome 북마크를 마크다운 저장소(옵시디언 볼트)로 옮겨 두고, 로봇과 "이번 주 북마크 얘기하자" 같은 대화를 나누는
 기능입니다. 첫 세팅은 설정 웹 UI(`--ui` → `http://127.0.0.1:7860/#/settings`)의 **Bookmark Insight** 섹션에서
 **프로필 탐색 → 폴더 만들기·적용 → .env에 적용 → 동기화 실행** 네 버튼으로 끝나며 재시작은 필요 없습니다.
 자세한 첫 세팅(어느 `.env`에 쓰이는지, 터미널 명령, 데모 데이터, 나머지 설정값)은
-[src/deskmate/SETUP.md](src/deskmate/SETUP.md)를 보세요.
+[src/bookmark_insight/SETUP.md](src/bookmark_insight/SETUP.md)를 보세요.
 
 > [!WARNING]
 > 설정 UI는 `0.0.0.0:7860`에 열려 같은 네트워크의 누구나 접근할 수 있고, 이 섹션의 버튼은 `.env`에 씁니다.

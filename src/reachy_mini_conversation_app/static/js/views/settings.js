@@ -15,7 +15,7 @@ import {
   untilReady,
 } from "../api.js";
 import { h } from "../ui.js";
-import { buildDeskmateSection } from "../components/deskmate-panel.js";
+import { buildBookmarkInsightSection } from "../components/bookmark-insight.js";
 
 const HF_CONNECTION_MODES = Object.freeze({
   DEPLOYED: "deployed",
@@ -38,12 +38,12 @@ export async function mountSettingsView({ outlet, signal }) {
         refreshVoices({ voiceSection, signal }),
         refreshVision({ visionSection, signal }),
         refreshCalendar({ calendarSection, signal }),
-        deskmateSection.refresh(),
+        bookmarkInsightSection.refresh(),
       ]),
   });
   const visionSection = buildVisionSection();
   const calendarSection = buildCalendarSection();
-  const deskmateSection = buildDeskmateSection({ signal });
+  const bookmarkInsightSection = buildBookmarkInsightSection({ signal });
   const voiceSection = buildVoiceSection();
   const statusSection = buildStatusSection();
 
@@ -59,7 +59,7 @@ export async function mountSettingsView({ outlet, signal }) {
     connectionSection.element,
     visionSection.element,
     calendarSection.element,
-    deskmateSection.element,
+    bookmarkInsightSection.element,
     voiceSection.element,
     statusSection.element
   );
@@ -70,7 +70,7 @@ export async function mountSettingsView({ outlet, signal }) {
     refreshVoices({ voiceSection, signal }),
     refreshVision({ visionSection, signal }),
     refreshCalendar({ calendarSection, signal }),
-    deskmateSection.refresh(),
+    bookmarkInsightSection.refresh(),
   ]);
 }
 

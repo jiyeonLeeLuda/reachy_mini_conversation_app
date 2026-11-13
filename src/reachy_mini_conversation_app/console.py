@@ -45,7 +45,6 @@ from reachy_mini_conversation_app.prompts import get_session_voice, get_session_
 from reachy_mini_conversation_app.streaming import AdditionalOutputs, audio_to_int16, audio_to_float32
 from reachy_mini_conversation_app.audio_service import AudioDeviceService
 from reachy_mini_conversation_app.camera_service import CameraService
-from reachy_mini_conversation_app.deskmate_routes import build_deskmate_ops, register_deskmate_methods
 from reachy_mini_conversation_app.startup_settings import read_startup_settings, write_startup_settings
 from reachy_mini_conversation_app.tools.core_tools import initialize_tools
 from reachy_mini_conversation_app.tool_space_routes import register_tool_space_methods
@@ -57,6 +56,10 @@ from reachy_mini_conversation_app.profile_tool_routes import register_profile_to
 from reachy_mini_conversation_app.audio.startup_config import apply_audio_startup_config
 from reachy_mini_conversation_app.conversation_handler import ConversationHandler
 from reachy_mini_conversation_app.audio.playback_pipeline import pin_playback_mixer_caps
+from reachy_mini_conversation_app.bookmark_insight_routes import (
+    build_bookmark_insight_ops,
+    register_bookmark_insight_methods,
+)
 
 
 try:
@@ -154,10 +157,10 @@ class LocalStream:
         # Local acoustic wake-word listener.  None when disabled or engine fails to load.
         # The listener's asyncio loop is wired in run() after the event loop starts.
         self._wake_listener: Any = self._try_create_wake_listener()
-        # App-side activity observers (DeskMate heartbeat etc.). Kept here, not on the
+        # App-side activity observers (Bookmark Insight heartbeat etc.). Kept here, not on the
         # handler, so they survive handler rebuilds.
         self._extra_activity_observers: list[Callable[[str], None]] = []
-        # Same for transcript observers (DeskMate conversation log): the handler has a
+        # Same for transcript observers (Bookmark Insight conversation log): the handler has a
         # single slot, so LocalStream fans (role, text, final) out from it.
         self._extra_transcript_observers: list[Callable[[str, str, bool], None]] = []
         self._install_handler(handler)
@@ -1040,10 +1043,12 @@ class LocalStream:
             logger.exception("Failed to register profile tool methods; personality tool settings will be unavailable")
 
         try:
-            # deskmate.* — first-time DeskMate setup from the settings UI (M10); .env writes reuse _persist_env_values.
-            register_deskmate_methods(rpc, build_deskmate_ops(persist_env=self._persist_env_values))
+            # bookmark_insight.* — first-time Bookmark Insight setup from the settings UI (M10); .env writes reuse _persist_env_values.
+            register_bookmark_insight_methods(rpc, build_bookmark_insight_ops(persist_env=self._persist_env_values))
         except Exception:
-            logger.exception("Failed to register DeskMate methods; the DeskMate setup panel will be unavailable")
+            logger.exception(
+                "Failed to register Bookmark Insight methods; the Bookmark Insight setup panel will be unavailable"
+            )
 
         self._settings_initialized = True
 

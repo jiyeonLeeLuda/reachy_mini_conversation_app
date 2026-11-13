@@ -2619,52 +2619,52 @@ button {
 }
 
 
-/* --- DeskMate setup panel (Settings → Bookmark Insight) --------------------------- */
+/* --- Bookmark Insight setup panel (Settings → Bookmark Insight) --------------------------- */
 
-.deskmate-inline {
+.bookmark-insight-inline {
   display: flex;
   gap: 10px;
   align-items: center;
 }
 
-.deskmate-inline .settings-input {
+.bookmark-insight-inline .settings-input {
   flex: 1 1 auto;
   min-width: 0;
 }
 
-.deskmate-inline .btn {
+.bookmark-insight-inline .btn {
   flex: none;
 }
 
-.deskmate-actions {
+.bookmark-insight-actions {
   flex-wrap: wrap;
 }
 
-.deskmate-details summary {
+.bookmark-insight-details summary {
   cursor: pointer;
   font-size: 0.85rem;
   color: var(--text-muted);
 }
 
-.deskmate-details[open] summary {
+.bookmark-insight-details[open] summary {
   margin-bottom: 8px;
 }
 
-.deskmate-table {
+.bookmark-insight-table {
   width: 100%;
   border-collapse: collapse;
   font-size: 0.88rem;
 }
 
-.deskmate-table th,
-.deskmate-table td {
+.bookmark-insight-table th,
+.bookmark-insight-table td {
   text-align: left;
   vertical-align: top;
   padding: 6px 8px;
   border-bottom: 1px solid var(--border);
 }
 
-.deskmate-table th {
+.bookmark-insight-table th {
   font-size: 0.75rem;
   font-weight: 600;
   color: var(--text-muted);
@@ -2672,32 +2672,32 @@ button {
   letter-spacing: 0.04em;
 }
 
-.deskmate-table td.is-num {
+.bookmark-insight-table td.is-num {
   text-align: right;
   font-variant-numeric: tabular-nums;
 }
 
-.deskmate-table tr.is-unusable {
+.bookmark-insight-table tr.is-unusable {
   color: var(--text-muted);
   opacity: 0.7;
 }
 
-.deskmate-check {
+.bookmark-insight-check {
   accent-color: var(--accent);
 }
 
-.deskmate-pill {
+.bookmark-insight-pill {
   margin-left: 8px;
 }
 
-.deskmate-warnings {
+.bookmark-insight-warnings {
   margin: 0;
   padding-left: 18px;
   font-size: 0.85rem;
   color: var(--warn);
 }
 
-.deskmate-env {
+.bookmark-insight-env {
   margin: 0;
   padding: 10px 12px;
   border-radius: var(--radius-sm);
@@ -2711,7 +2711,7 @@ button {
   color: var(--danger);
 }
 
-.deskmate-spinner {
+.bookmark-insight-spinner {
   display: inline-block;
   width: 0.9em;
   height: 0.9em;
@@ -2720,17 +2720,17 @@ button {
   border-right-color: transparent;
   border-radius: 50%;
   vertical-align: -0.1em;
-  animation: deskmate-spin 0.8s linear infinite;
+  animation: bookmark-insight-spin 0.8s linear infinite;
 }
 
-@keyframes deskmate-spin {
+@keyframes bookmark-insight-spin {
   to {
     transform: rotate(360deg);
   }
 }
 
 @media (max-width: 620px) {
-  .deskmate-inline {
+  .bookmark-insight-inline {
     flex-direction: column;
     align-items: stretch;
   }

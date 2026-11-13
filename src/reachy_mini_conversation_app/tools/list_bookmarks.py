@@ -1,15 +1,15 @@
-"""List non-archived bookmarks in a period, newest first (design doc §2.2). Wraps ``deskmate.api.list_bookmarks``."""
+"""List non-archived bookmarks in a period, newest first (design doc §2.2). Wraps ``bookmark_insight.api.list_bookmarks``."""
 
 from __future__ import annotations
 import time
 import logging
 from typing import Any
 
-from deskmate import api
-from deskmate.api import MAX_LIMIT, DEFAULT_LIMIT, LIST_NEXT_ACTION
+from bookmark_insight import api
+from bookmark_insight.api import MAX_LIMIT, DEFAULT_LIMIT, LIST_NEXT_ACTION
 from reachy_mini_conversation_app.tools.core_tools import Tool, ToolDependencies
 from reachy_mini_conversation_app.tools.get_insight import PERIOD_PROPERTIES
-from reachy_mini_conversation_app.tools._deskmate_common import log_args, elapsed_ms, profile_hint
+from reachy_mini_conversation_app.tools._bookmark_insight_common import log_args, elapsed_ms, profile_hint
 
 
 logger = logging.getLogger(__name__)

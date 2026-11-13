@@ -1,6 +1,6 @@
-"""Return the weekly-insight note for a period immediately (design doc §2.2).
+"""Return the Bookmark Insight note for a period immediately (design doc §2.2).
 
-Thin wrapper over ``deskmate.api.get_insight``. Never does heavy work: a
+Thin wrapper over ``bookmark_insight.api.get_insight``. Never does heavy work: a
 missing or stale note yields ``status: generating`` and tells the model to call
 ``build_insight`` (the pomodoro focus→break hand-off pattern), so the voice
 loop is never blocked by fetching or LLM calls.
@@ -16,9 +16,9 @@ import time
 import logging
 from typing import Any
 
-from deskmate import api
+from bookmark_insight import api
 from reachy_mini_conversation_app.tools.core_tools import Tool, ToolDependencies
-from reachy_mini_conversation_app.tools._deskmate_common import log_args, elapsed_ms, profile_hint
+from reachy_mini_conversation_app.tools._bookmark_insight_common import log_args, elapsed_ms, profile_hint
 
 
 logger = logging.getLogger(__name__)
@@ -39,7 +39,7 @@ class GetInsight(Tool):
 
     name = "get_insight"
     description = (
-        "Get the weekly insight (topic clusters, correlations, one question each) for the user's "
+        "Get the Bookmark Insight (topic clusters, correlations, one question each) for the user's "
         "bookmarks in a period. Returns immediately. status 'ready' has the clusters; 'generating' "
         "means you must call build_insight next; 'empty' means no bookmarks in the period; 'partial' has "
         "the clusters of the bookmarks seen so far plus pending_count not yet summarized (call build_insight "

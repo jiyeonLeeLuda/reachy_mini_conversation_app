@@ -1,6 +1,6 @@
 """Run the full insight pipeline (sync → summarize → cluster → note) in the background.
 
-Thin wrapper over ``deskmate.api.run_build_pipeline``. Long-running: the
+Thin wrapper over ``bookmark_insight.api.run_build_pipeline``. Long-running: the
 backends run every tool through ``BackgroundToolManager``, so the model only
 sees the result when this coroutine returns, exactly like a pomodoro phase
 ending. ``get_insight`` hands off to this tool when the note is missing or
@@ -10,7 +10,7 @@ M7: one call summarizes at most ``batch_max_summaries`` pending bookmarks (and
 never past the daily cap) and writes the note from everything summarized so
 far. Pending bookmarks left → ``status: partial`` with the counts; calling
 again continues from them. While the pipeline runs the profile/period is
-registered (in ``deskmate.api``) so ``get_insight`` answers ``backfilling``.
+registered (in ``bookmark_insight.api``) so ``get_insight`` answers ``backfilling``.
 """
 
 from __future__ import annotations
@@ -19,12 +19,12 @@ import asyncio
 import logging
 from typing import Any
 
-from deskmate import api
-from deskmate.api import BUSY_NEXT_ACTION, BUILT_NEXT_ACTION, DEGRADED_NEXT_ACTION
+from bookmark_insight import api
+from bookmark_insight.api import BUSY_NEXT_ACTION, BUILT_NEXT_ACTION, DEGRADED_NEXT_ACTION
 from reachy_mini_conversation_app.tools.core_tools import Tool, ToolDependencies
-from reachy_mini_conversation_app.deskmate_progress import working_signal
 from reachy_mini_conversation_app.tools.get_insight import PERIOD_PROPERTIES
-from reachy_mini_conversation_app.tools._deskmate_common import log_args, elapsed_ms, profile_hint
+from reachy_mini_conversation_app.bookmark_insight_progress import working_signal
+from reachy_mini_conversation_app.tools._bookmark_insight_common import log_args, elapsed_ms, profile_hint
 
 
 logger = logging.getLogger(__name__)
@@ -39,7 +39,7 @@ class BuildInsight(Tool):
     # task_status / task_cancel work on it through the BackgroundToolManager.
     name = "build_insight"
     description = (
-        "Build the weekly insight note for a period (sync bookmarks, summarize, cluster). Call it only "
+        "Build the Bookmark Insight note for a period (sync bookmarks, summarize, cluster). Call it only "
         "when get_insight returned status 'generating', or 'partial' and the user asks to continue, with "
         "the same since/until/profile. It takes a while; the result arrives when the note is ready (or "
         "'partial' when more bookmarks than one batch allows are still pending) and tells you how to start talking. "

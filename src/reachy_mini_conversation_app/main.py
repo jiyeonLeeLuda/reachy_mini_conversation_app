@@ -21,7 +21,7 @@ from reachy_mini_conversation_app.utils import (
     setup_logger,
     log_connection_troubleshooting,
 )
-from reachy_mini_conversation_app.deskmate_hooks import install_deskmate_hooks
+from reachy_mini_conversation_app.bookmark_insight_hooks import install_bookmark_insight_hooks
 
 
 if TYPE_CHECKING:
@@ -293,8 +293,8 @@ def run(
     if effective_settings_app is not None:
         stream_manager._init_settings_ui_if_needed()
 
-    # DeskMate insight session: heartbeat on every activity, auto-close on idle/sleep/shutdown (M6).
-    deskmate_hooks = install_deskmate_hooks(stream_manager, logger)
+    # Bookmark Insight session: heartbeat on every activity, auto-close on idle/sleep/shutdown (M6).
+    bookmark_insight_hooks = install_bookmark_insight_hooks(stream_manager, logger)
 
     go_to_sleep_lock = threading.Lock()
     go_to_sleep_requested = threading.Event()
@@ -358,7 +358,7 @@ def run(
           2. OpenAI standby: REACHY_MINI_STANDBY_ON_SLEEP=1 + handler supports it.
           3. Legacy: sleep motion + stop app.
         """
-        deskmate_hooks.on_sleep()
+        bookmark_insight_hooks.on_sleep()
         active_handler = getattr(stream_manager, "handler", None) or handler
 
         # Path 1 — local acoustic standby (Gemini back-end + wake listener).
@@ -488,7 +488,7 @@ def run(
         keyboard_interrupted = True
         logger.info("Keyboard interruption in main thread... closing server.")
     finally:
-        deskmate_hooks.on_shutdown()
+        bookmark_insight_hooks.on_shutdown()
         # Direct console exits put the robot to sleep (opt-out via
         # REACHY_MINI_SLEEP_ON_EXIT=0). External stops (dashboard/mobile)
         # keep the original behavior: stop the app, leave the robot awake.
