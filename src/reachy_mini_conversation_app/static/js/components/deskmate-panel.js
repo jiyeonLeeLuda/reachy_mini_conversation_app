@@ -1,4 +1,4 @@
-/** DeskMate first-time setup section for the Settings view (M10 셋업 대시보드). */
+/** Bookmark Insight (deskmate) first-time setup section for the Settings view (M10 셋업 대시보드). */
 
 import {
   applyDeskmateEnv,
@@ -109,7 +109,7 @@ export function buildDeskmateSection({ signal } = {}) {
   const element = h(
     "section",
     { class: "settings-section", "data-section": "deskmate" },
-    h("h2", { class: "settings-section-title" }, "DeskMate"),
+    h("h2", { class: "settings-section-title" }, "Bookmark Insight"),
     h(
       "p",
       { class: "settings-hint settings-section-intro" },

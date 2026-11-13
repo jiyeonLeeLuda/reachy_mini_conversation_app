@@ -88,8 +88,8 @@ reachy-mini-conversation-app --ui --no-camera    # 카메라가 없는 PC
 
 5. 대화 → **"종료해 줘"** → 취침 대기 → **"깨어나 리치미니"** → 대화 재개.
    끝낼 때는 콘솔에서 `Ctrl+C`.
-6. (선택) Chrome 북마크 위클리 인사이트(DeskMate)는 웹 UI의 **Settings → DeskMate** 섹션에서
-   버튼만으로 첫 세팅을 끝낼 수 있습니다 → [DeskMate 첫 세팅](#deskmate-첫-세팅-웹-ui-설정-대시보드).
+6. (선택) Chrome 북마크 위클리 인사이트(DeskMate)는 웹 UI의 **Settings → Bookmark Insight** 섹션에서
+   버튼만으로 첫 세팅을 끝낼 수 있습니다 → [Bookmark Insight 첫 세팅](#bookmark-insight-첫-세팅-웹-ui-설정-대시보드).
 
 > [!NOTE]
 > Windows에서는 실행 전 `$env:PYTHONUTF8 = "1"`을 설정하면 한국어 로그 깨짐을 방지할 수 있습니다.
@@ -122,11 +122,11 @@ mjpython "$(which reachy-mini-daemon)" --sim
 reachy-mini-daemon --sim
 ```
 
-## DeskMate 첫 세팅 (웹 UI 설정 대시보드)
+## Bookmark Insight 첫 세팅 (웹 UI 설정 대시보드)
 
-DeskMate는 Chrome 북마크를 마크다운 저장소(옵시디언 볼트)로 옮겨 두고, 로봇과 "이번 주 북마크 얘기하자" 같은
+Bookmark Insight는 Chrome 북마크를 마크다운 저장소(옵시디언 볼트)로 옮겨 두고, 로봇과 "이번 주 북마크 얘기하자" 같은
 대화를 나누는 기능입니다. 그 첫 세팅을 터미널 없이 끝낼 수 있도록 설정 웹 UI(`reachy-mini-conversation-app --ui`
-→ `http://127.0.0.1:7860/#/settings`)의 아래쪽에 **DeskMate** 섹션을 두었습니다. 상태 카드가 지금 설정 상태와
+→ `http://127.0.0.1:7860/#/settings`)의 아래쪽에 **Bookmark Insight** 섹션을 두었습니다. 상태 카드가 지금 설정 상태와
 저장소·Chrome 경로·프로필별 북마크 수·마지막 동기화 시각을 보여 주고, 그 아래 버튼들이 설정부터 동기화까지
 대신해 줍니다. 모든 버튼은 `deskmate` 패키지의 함수를 바로 부르며 셸 명령을 만들지 않습니다.
 
