@@ -71,7 +71,13 @@ export function buildDeskmateSection({ signal } = {}) {
     "aria-label": "북마크 저장소 폴더",
   });
   const repoButton = h("button", { type: "button", class: "btn btn--ghost" }, "폴더 만들기·적용");
-  const repoHint = h("p", { class: "settings-hint" }, "마크다운 북마크가 쌓일 폴더(옵시디언 볼트)입니다.");
+  const repoHint = h("p", { class: "settings-hint" }, "마크다운 북마크가 쌓일 폴더입니다.");
+  const repoSuggestionNote = h("p", { class: "settings-hint", hidden: true }, "옵시디언 볼트를 찾아 추천한 경로입니다.");
+  const repoHelp = h(
+    "p",
+    { class: "settings-hint" },
+    "옵시디언(Obsidian)은 이런 md 파일을 노트처럼 보여 주고 [[링크]]를 열어 주는 무료 메모 앱입니다. 쓰고 있다면 볼트(노트 폴더) 안의 폴더를 권하고, 쓰지 않는다면 아무 폴더나 괜찮습니다 (노트는 일반 md 파일)."
+  );
   const chromeInput = h("input", {
     type: "text",
     class: "settings-input",
@@ -121,7 +127,9 @@ export function buildDeskmateSection({ signal } = {}) {
       { class: "settings-field" },
       h("span", { class: "settings-label" }, "북마크 저장소 폴더"),
       h("div", { class: "deskmate-inline" }, repoInput, repoButton),
-      repoHint
+      repoHint,
+      repoSuggestionNote,
+      repoHelp
     ),
     chromeDetails,
     h("div", { class: "settings-actions deskmate-actions" }, discoverButton, applyButton, syncButton),
@@ -206,6 +214,9 @@ export function buildDeskmateSection({ signal } = {}) {
       ...(data?.sync_running ? [statusRow("동기화", "진행 중…", "warn")] : [])
     );
     if (!repoInput.value) repoInput.value = data?.repo || data?.suggested_repo || "";
+    repoSuggestionNote.hidden = !(
+      data?.obsidian?.suggested_repo_reason === "obsidian_vault" && repoInput.value === data?.suggested_repo
+    );
     if (!demoInput.value && data?.suggested_demo_target) demoInput.value = data.suggested_demo_target;
     if (!chromeInput.value && !data?.chrome_dir_is_default && data?.chrome_user_data_dir) {
       chromeInput.value = data.chrome_user_data_dir;
@@ -221,6 +232,7 @@ export function buildDeskmateSection({ signal } = {}) {
       info.exists ? (info.writable ? "쓰기 가능" : "쓰기 불가") : null,
       `북마크 md ${info.bookmark_count}개`,
       `인사이트 노트 ${info.insight_count}개`,
+      info.in_obsidian_vault ? `옵시디언 볼트 안 (${info.vault_name})` : "볼트 밖: 노트 안의 [[링크]]는 옵시디언에서 열리지 않습니다",
     ]
       .filter(Boolean)
       .join(" · ");

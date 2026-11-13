@@ -34,6 +34,7 @@ ENV_BATCH_MAX_SUMMARIES = "DESKMATE_BATCH_MAX_SUMMARIES"
 ENV_DAILY_MAX_SUMMARIES = "DESKMATE_DAILY_MAX_SUMMARIES"
 ENV_CALL_INTERVAL_S = "DESKMATE_CALL_INTERVAL_S"
 ENV_GEMINI_API_KEY = "GEMINI_API_KEY"  # shared with the Gemini Live backend
+ENV_OBSIDIAN_CONFIG = "DESKMATE_OBSIDIAN_CONFIG"  # overrides the OS default obsidian.json (setup dashboard only)
 
 # --- defaults (tuning constants; keep in sync with design doc §2.3) ---
 DEFAULT_EXCLUDE_FOLDERS: tuple[str, ...] = ("private",)

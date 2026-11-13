@@ -27,6 +27,7 @@ from reachy_mini.io.jsonrpc import JsonRpcError
 from reachy_mini.apps.jsonrpc_server import JsonRpcServer
 from deskmate.demo import DEMO_PERSONALITY, DEFAULT_FIXTURES_DIR, create_demo_repo
 from deskmate.store import repo_lock, list_profiles, iter_bookmarks, atomic_write_text
+from deskmate.obsidian import find_vault, config_path, list_vaults, suggest_repo
 from deskmate.settings import (
     ENV_BOOKMARK_REPO,
     ENV_CHROME_PROFILES,
@@ -47,6 +48,7 @@ SYNC_RLOCK_WAIT_S = 2.0  # wait this long for repo_lock held by another thread (
 DEMO_DEFAULT_DIRNAME = "deskmate-demo"  # default demo target under the home directory
 LAST_SYNC_FILENAME = "last_sync.json"  # written under <repo>/.deskmate/ after a UI sync
 SUGGESTED_REPO_PARTS: tuple[str, ...] = ("Documents", "bookmarks")  # default repo under the home directory
+OBSIDIAN_VAULT_LIMIT = 10  # vaults listed in deskmate.status
 ALLOWED_ENV_KEYS: tuple[str, ...] = (ENV_CHROME_PROFILES, ENV_BOOKMARK_REPO, ENV_CHROME_USER_DATA_DIR)
 PATH_ENV_KEYS: frozenset[str] = frozenset({ENV_BOOKMARK_REPO, ENV_CHROME_USER_DATA_DIR})
 BOOKMARKS_DIRNAME = "bookmarks"
@@ -187,11 +189,15 @@ class DeskmateOps:
     @staticmethod
     def _repo_state(target: Path) -> dict[str, object]:
         exists = target.is_dir()
+        vault = find_vault(target)
         return {
             "exists": exists,
             "writable": exists and _is_writable(target),
             "bookmark_count": _count_markdown(target / BOOKMARKS_DIRNAME),
             "insight_count": _count_markdown(target / INSIGHTS_DIRNAME),
+            "in_obsidian_vault": vault is not None,
+            "vault_path": str(vault) if vault is not None else None,
+            "vault_name": vault.name if vault is not None else None,
         }
 
     @staticmethod
@@ -256,10 +262,18 @@ class DeskmateOps:
                 last_sync = self._read_last_sync(settings)
             except OSError as exc:
                 logger.warning("Could not inspect the DeskMate repository %s: %s", settings.bookmark_repo, exc)
+        obsidian_config = config_path()
+        vaults = list_vaults(obsidian_config)[:OBSIDIAN_VAULT_LIMIT] if obsidian_config is not None else []
+        suggested_repo = suggest_repo(vaults, Path.home().joinpath(*SUGGESTED_REPO_PARTS), SUGGESTED_REPO_PARTS[-1])
         return {
             "configured": settings.configured,
             "repo": str(settings.bookmark_repo) if settings.bookmark_repo is not None else None,
-            "suggested_repo": str(Path.home().joinpath(*SUGGESTED_REPO_PARTS)),
+            "suggested_repo": str(suggested_repo),
+            "obsidian": {
+                "installed": obsidian_config is not None,
+                "vaults": [{"name": vault.name, "path": str(vault.path), "open": vault.open} for vault in vaults],
+                "suggested_repo_reason": "obsidian_vault" if vaults else "default",
+            },
             "suggested_demo_target": str(Path.home() / DEMO_DEFAULT_DIRNAME),
             "insights_dir": str(settings.resolved_insights_dir) if settings.configured else None,
             "chrome_user_data_dir": str(chrome_root),

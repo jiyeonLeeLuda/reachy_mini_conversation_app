@@ -22,6 +22,7 @@ from deskmate.store import LOCK_FILENAME, repo_lock
 from deskmate.settings import (
     ENV_BOOKMARK_REPO,
     ENV_CHROME_PROFILES,
+    ENV_OBSIDIAN_CONFIG,
     ENV_CHROME_USER_DATA_DIR,
     DeskmateSettings,
     load_settings,
@@ -66,11 +67,22 @@ class FakeEnvWriter:
 
 
 @pytest.fixture(autouse=True)
-def clean_deskmate_env(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Start every test without DeskMate keys in the environment."""
+def clean_deskmate_env(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    """Start every test without DeskMate keys in the environment and without the developer's real Obsidian config."""
     for key in list(os.environ):
         if key.startswith("DESKMATE_"):
             monkeypatch.delenv(key, raising=False)
+    monkeypatch.setenv(ENV_OBSIDIAN_CONFIG, str(tmp_path / "no-obsidian.json"))
+
+
+def _obsidian_vault(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
+    """Create a fake vault and point DESKMATE_OBSIDIAN_CONFIG at a config that lists it."""
+    vault = tmp_path / "notes"
+    (vault / ".obsidian").mkdir(parents=True)
+    config = tmp_path / "obsidian.json"
+    config.write_text(json.dumps({"vaults": {"abc": {"path": str(vault), "ts": 1, "open": True}}}), encoding="utf-8")
+    monkeypatch.setenv(ENV_OBSIDIAN_CONFIG, str(config))
+    return vault
 
 
 @pytest.fixture
@@ -155,6 +167,22 @@ def test_status_unconfigured_is_not_an_error(env_writer: FakeEnvWriter) -> None:
     assert status["chrome_dir_is_default"] is True
     assert status["suggested_repo"] == str(Path.home() / "Documents" / "bookmarks")
     assert status["suggested_demo_target"] == str(Path.home() / routes_mod.DEMO_DEFAULT_DIRNAME)
+    assert status["obsidian"] == {"installed": False, "vaults": [], "suggested_repo_reason": "default"}
+
+
+def test_status_suggests_a_folder_inside_the_obsidian_vault(
+    tmp_path: Path, env_writer: FakeEnvWriter, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """With Obsidian installed the suggested repo moves into the first vault so ``[[wikilinks]]`` resolve."""
+    vault = _obsidian_vault(tmp_path, monkeypatch)
+    client = _mount(DeskmateOps(persist_env=env_writer, load_settings_fn=load_settings))
+    status = _result(client, "deskmate.status")
+    assert status["suggested_repo"] == str(vault / "bookmarks")
+    assert status["obsidian"] == {
+        "installed": True,
+        "vaults": [{"name": "notes", "path": str(vault), "open": True}],
+        "suggested_repo_reason": "obsidian_vault",
+    }
 
 
 def test_status_counts_sample_repo(settings: DeskmateSettings, repo: Path, env_writer: FakeEnvWriter) -> None:
@@ -347,6 +375,9 @@ def test_repo_set_creates_and_is_idempotent(tmp_path: Path, chrome_user_data: Pa
         "writable": True,
         "bookmark_count": 0,
         "insight_count": 0,
+        "in_obsidian_vault": False,
+        "vault_path": None,
+        "vault_name": None,
         "applied": True,
     }
     assert env_writer.calls == [{ENV_BOOKMARK_REPO: str(target)}]
@@ -365,6 +396,21 @@ def test_repo_set_preview_does_not_create(tmp_path: Path, env_writer: FakeEnvWri
     assert result["exists"] is False and result["writable"] is False and result["applied"] is False
     assert result["created"] is False
     assert not target.exists() and env_writer.calls == []
+
+
+def test_repo_set_reports_obsidian_vault(
+    tmp_path: Path, env_writer: FakeEnvWriter, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The preview says whether the path sits inside a vault (a folder with ``.obsidian/``), existing or not."""
+    vault = _obsidian_vault(tmp_path, monkeypatch)
+    client = _mount(DeskmateOps(persist_env=env_writer, load_settings_fn=load_settings))
+    inside = _result(client, "deskmate.repo.set", {"path": str(vault / "sub" / "bookmarks"), "create": False})
+    assert inside["in_obsidian_vault"] is True
+    assert inside["vault_path"] == str(vault) and inside["vault_name"] == "notes"
+    outside = _result(client, "deskmate.repo.set", {"path": str(tmp_path / "bookmarks"), "create": False})
+    assert outside["in_obsidian_vault"] is False
+    assert outside["vault_path"] is None and outside["vault_name"] is None
+    assert env_writer.calls == []
 
 
 def test_repo_set_preview_counts_sample_repo(repo: Path, env_writer: FakeEnvWriter) -> None:
