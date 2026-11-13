@@ -161,7 +161,7 @@
 
 ### Task 4: 데모 데이터 버튼 + 문서
 
-> 사용자 문서: [README "Bookmark Insight 첫 세팅 (웹 UI 설정 대시보드)" 절](../README.md#bookmark-insight-첫-세팅-웹-ui-설정-대시보드) (AGENTS.md 규칙대로 `docs/` 아래 별도 md 없이 README 한 곳에 둔다).
+> 사용자 문서: [`src/deskmate/SETUP.md`](../src/deskmate/SETUP.md) (패키지 안의 상세 가이드) + [README "Bookmark Insight" 절](../README.md#bookmark-insight-chrome-북마크-위클리-인사이트)의 요약. AGENTS.md 규칙대로 `docs/` 아래에는 md를 두지 않는다.
 
 **Files:**
 - Create: `src/deskmate/demo.py`

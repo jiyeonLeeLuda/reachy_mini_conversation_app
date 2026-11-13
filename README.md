@@ -88,8 +88,7 @@ reachy-mini-conversation-app --ui --no-camera    # 카메라가 없는 PC
 
 5. 대화 → **"종료해 줘"** → 취침 대기 → **"깨어나 리치미니"** → 대화 재개.
    끝낼 때는 콘솔에서 `Ctrl+C`.
-6. (선택) Chrome 북마크 위클리 인사이트(DeskMate)는 웹 UI의 **Settings → Bookmark Insight** 섹션에서
-   버튼만으로 첫 세팅을 끝낼 수 있습니다 → [Bookmark Insight 첫 세팅](#bookmark-insight-첫-세팅-웹-ui-설정-대시보드).
+6. (선택) Chrome 북마크 위클리 인사이트는 아래 [Bookmark Insight](#bookmark-insight-chrome-북마크-위클리-인사이트) 참고.
 
 > [!NOTE]
 > Windows에서는 실행 전 `$env:PYTHONUTF8 = "1"`을 설정하면 한국어 로그 깨짐을 방지할 수 있습니다.
@@ -122,45 +121,17 @@ mjpython "$(which reachy-mini-daemon)" --sim
 reachy-mini-daemon --sim
 ```
 
-## Bookmark Insight 첫 세팅 (웹 UI 설정 대시보드)
+## Bookmark Insight (Chrome 북마크 위클리 인사이트)
 
-Bookmark Insight는 Chrome 북마크를 마크다운 저장소(옵시디언 볼트)로 옮겨 두고, 로봇과 "이번 주 북마크 얘기하자" 같은
-대화를 나누는 기능입니다. 그 첫 세팅을 터미널 없이 끝낼 수 있도록 설정 웹 UI(`reachy-mini-conversation-app --ui`
-→ `http://127.0.0.1:7860/#/settings`)의 아래쪽에 **Bookmark Insight** 섹션을 두었습니다. 상태 카드가 지금 설정 상태와
-저장소·Chrome 경로·프로필별 북마크 수·마지막 동기화 시각을 보여 주고, 그 아래 버튼들이 설정부터 동기화까지
-대신해 줍니다. 모든 버튼은 `deskmate` 패키지의 함수를 바로 부르며 셸 명령을 만들지 않습니다.
-
-처음이라면 이 순서로 누르면 됩니다. 먼저 **프로필 탐색**을 누르면 내 PC의 Chrome 프로필이 폴더명·표시 이름·북마크
-파일별 개수와 함께 표로 뜨고, 마지막에 쓴 프로필이 기본으로 체크되어 있습니다(다른 사람이나 회사 프로필은 체크하지
-마세요). 다음으로 **북마크 저장소 폴더** 입력란을 확인합니다. 기본값 `~/Documents/bookmarks`가 절대 경로로 채워져
-있고, 입력하는 동안 폴더가 있는지·쓸 수 있는지·이미 든 북마크 수가 한 줄로 갱신됩니다. **폴더 만들기·적용**을 누르면
-없는 폴더를 하위까지 만들고 `.env`에 저장합니다(상대 경로, Chrome User Data 안쪽, 홈 폴더 자체, 드라이브 루트는
-거부합니다). 이어서 **.env에 적용**으로 체크한 프로필을 저장하면 상태 카드가 "설정됨"으로 바뀌고 재시작은 필요
-없습니다. 버튼이 쓰는 `.env`는 앱을 터미널(`reachy-mini-conversation-app --ui`)에서 띄웠다면 앱이 읽어 들인 그 파일
-(현재 폴더에서부터 찾은 `.env`, 없으면 현재 폴더에 새로 만듭니다)이고, Reachy 대시보드에서 띄웠다면 앱 인스턴스 폴더의
-`.env`입니다. 마지막으로 **동기화 실행**을 누르면 버튼이 잠기고 스피너가 돌다가 프로필별 created/updated/archived/excluded
-표와 경고가 나옵니다. 이제 로봇에게 "이번 주 북마크 얘기하자"라고 말해 보세요.
-
-이 화면이 `.env`에 쓰는 값은 세 가지뿐입니다: 저장소 경로 `DESKMATE_BOOKMARK_REPO`, 읽을 프로필 목록
-`DESKMATE_CHROME_PROFILES`, 그리고 Chrome 폴더를 자동으로 못 찾아 직접 적었을 때만 `DESKMATE_CHROME_USER_DATA_DIR`.
-터미널이 더 편하다면 같은 일을 `python -m deskmate.sync --discover`(프로필 탐색과 `.env` 줄 출력)와
-`python -m deskmate.sync`(동기화)로 할 수 있습니다.
-
-실제 Chrome 없이 시뮬레이터([시뮬레이터 데몬 띄우기](#시뮬레이터-데몬-띄우기))로 시연하려면 같은 섹션의
-**데모 데이터 준비**를 누르세요. 대상 폴더(기본
-`~/deskmate-demo`)에 요약된 북마크 3개와 ready 인사이트 노트 1개, 가짜 `User Data`가 복사되고, 돌려받은 값은
-**이 값을 .env에 적용** 버튼 한 번으로 반영됩니다(이미 있는 폴더는 덮어쓰지 않고 거부하며, 픽스처는 저장소
-체크아웃에만 있습니다). 그다음 Personalities 화면에서 `deskmate_ko`를 기본 페르소나로 지정하고 "10월 31일부터
-11월 6일까지 북마크 얘기하자"라고 말하면 바로 대화가 됩니다. 터미널 버전은 `python scripts/deskmate_demo_setup.py ~/deskmate-demo`입니다.
-
-대시보드가 건드리지 않는 나머지 DeskMate 값은 `.env.example` 7절 주석을 보고 직접 적습니다. 요약 배치의 하루 상한
-`DESKMATE_DAILY_MAX_SUMMARIES`(기본 100, 넘치면 다음 날 이어서 백필)와 호출 간격 `DESKMATE_CALL_INTERVAL_S`(기본 6초),
-그리고 저장소 미러 `DESKMATE_GIT_MIRROR=1`(기본 끔, 켜면 동기화 결과에 프로필별 미러 커밋 수가 같이 나오고 과거 이력은
-`python -m deskmate.sync --git-rebuild`로 재구성)이 대표적입니다.
+Chrome 북마크를 마크다운 저장소(옵시디언 볼트)로 옮겨 두고, 로봇과 "이번 주 북마크 얘기하자" 같은 대화를 나누는
+기능입니다. 첫 세팅은 설정 웹 UI(`--ui` → `http://127.0.0.1:7860/#/settings`)의 **Bookmark Insight** 섹션에서
+**프로필 탐색 → 폴더 만들기·적용 → .env에 적용 → 동기화 실행** 네 버튼으로 끝나며 재시작은 필요 없습니다.
+자세한 첫 세팅(어느 `.env`에 쓰이는지, 터미널 명령, 데모 데이터, 나머지 설정값)은
+[src/deskmate/SETUP.md](src/deskmate/SETUP.md)를 보세요.
 
 > [!WARNING]
-> 설정 UI는 `0.0.0.0:7860`에 열려 같은 네트워크의 누구나 접근할 수 있고, 이 섹션의 버튼은 `.env`에 씁니다
-> (기존 Connection 설정과 같은 경계입니다). 집 Wi-Fi 밖, 특히 공용 네트워크에서는 7860 포트를 열어 두지 마세요.
+> 설정 UI는 `0.0.0.0:7860`에 열려 같은 네트워크의 누구나 접근할 수 있고, 이 섹션의 버튼은 `.env`에 씁니다.
+> 집 Wi-Fi 밖, 특히 공용 네트워크에서는 7860 포트를 열어 두지 마세요.
 
 ## 이 fork가 추가한 .env 설정
 
