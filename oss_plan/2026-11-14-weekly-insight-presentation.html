@@ -1,0 +1,602 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Bookmark Insight · 북마크 인사이트 발표</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;500;700&display=swap">
+<style>
+  :root {
+    --dark: #1F2A33;
+    --light: #F7F4EE;
+    --paper: #FFFFFF;
+    --line: #E3DED4;
+    --ink: #1F2A33;
+    --muted: #4A5568;
+    --muted-dark: #C9D3DB;
+    --orange: #E07A3F;
+    --blue: #3A86C8;
+    --green: #3D9A6A;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; background: var(--dark); color: var(--ink); font-family: 'Noto Sans KR', 'Apple SD Gothic Neo', 'Malgun Gothic', sans-serif; }
+  body { scroll-snap-type: y mandatory; overflow-y: scroll; height: 100vh; }
+
+  .slide {
+    scroll-snap-align: start;
+    min-height: 100vh;
+    padding: 5vh 7vw 7vh;
+    display: flex;
+    flex-direction: column;
+    gap: 1.8vh;
+    background: var(--light);
+    color: var(--ink);
+    position: relative;
+  }
+  .slide.dark { background: var(--dark); color: var(--light); }
+  .slide.dark .muted { color: var(--muted-dark); }
+  .muted { color: var(--muted); }
+
+  .eyebrow { font-size: clamp(13px, 1.2vw, 18px); font-weight: 500; letter-spacing: 2px; color: var(--orange); margin: 0; }
+  h1 { font-size: clamp(38px, 5.4vw, 84px); font-weight: 700; line-height: 1.12; margin: 0; }
+  h2 { font-size: clamp(26px, 3vw, 46px); font-weight: 700; line-height: 1.15; margin: 0; }
+  h3 { font-size: clamp(16px, 1.6vw, 24px); font-weight: 700; margin: 0; }
+  p, li { font-size: clamp(15px, 1.4vw, 22px); line-height: 1.5; margin: 0; }
+  ul { margin: 0; padding-left: 1.2em; display: flex; flex-direction: column; gap: 0.4em; }
+  .small { font-size: clamp(12px, 1.05vw, 17px); }
+  .xs { font-size: clamp(11px, 0.95vw, 15px); }
+  code { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 0.9em; }
+  .lead { font-size: clamp(18px, 2vw, 30px); line-height: 1.4; }
+  .spacer { flex: 1; }
+
+  .row { display: flex; gap: 1.8vw; }
+  .row > * { flex: 1; min-width: 0; }
+  .grid2 { display: grid; grid-template-columns: repeat(2, 1fr); gap: 1.4vw; }
+  .grid4 { display: grid; grid-template-columns: repeat(4, 1fr); gap: 1.4vw; }
+  .card { background: var(--paper); border: 1px solid var(--line); border-radius: 18px; padding: 1.8vh 1.5vw; display: flex; flex-direction: column; gap: 0.7vh; }
+  .card.dark { background: var(--dark); color: var(--light); border-color: var(--dark); }
+  .card.dark .muted { color: var(--muted-dark); }
+  .slide.dark .card.dark { border: 1px solid #3a4651; }
+  .card .num { font-size: clamp(34px, 4.4vw, 68px); font-weight: 700; color: var(--orange); line-height: 1.05; }
+  .card .num small { font-size: 0.45em; color: var(--muted); font-weight: 500; margin-left: 0.2em; }
+
+  table { border-collapse: collapse; width: 100%; font-size: clamp(12px, 1.15vw, 18px); }
+  th, td { text-align: left; padding: 0.8vh 0.9vw; border-bottom: 1px solid var(--line); vertical-align: top; line-height: 1.4; }
+  th { background: var(--dark); color: var(--light); font-weight: 500; }
+  tr:nth-child(even) td { background: var(--paper); }
+  .slide.dark th { background: #3a4651; color: var(--light); }
+  .card.dark td { border-bottom-color: #3a4651; }
+  .card.dark tr:nth-child(even) td { background: #2a3640; }
+  .slide.dark td { border-bottom-color: #3a4651; }
+  .slide.dark tr:nth-child(even) td { background: #2a3640; }
+
+  .pill { display: inline-block; padding: 0.15em 0.7em; border-radius: 999px; background: var(--orange); color: var(--dark); font-weight: 700; font-size: 0.8em; white-space: nowrap; }
+  .pill.blue { background: var(--blue); color: var(--light); }
+  .pill.gray { background: var(--line); color: var(--muted); }
+  .pill.green { background: var(--green); color: var(--light); }
+  .chip { display: inline-block; padding: 0.1em 0.6em; border-radius: 999px; background: var(--line); color: var(--muted); font-size: 0.8em; font-weight: 500; font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; white-space: nowrap; }
+  .slide.dark .chip, .card.dark .chip, .log .bot .chip { background: #3a4651; color: var(--muted-dark); }
+
+  /* 대화 기록 */
+  .log { display: flex; flex-direction: column; gap: 0.5vh; }
+  .log .line { display: flex; gap: 1vw; align-items: flex-start; font-size: clamp(12px, 1.05vw, 16px); line-height: 1.4; }
+  .log .t { width: 5.5vw; min-width: 58px; color: var(--muted); font-variant-numeric: tabular-nums; padding-top: 0.45em; font-size: 0.9em; }
+  .log .w { width: 5vw; min-width: 56px; font-weight: 700; padding-top: 0.45em; }
+  .log .b { flex: 1; padding: 0.45em 0.9em; border-radius: 12px; }
+  .log .me .b { background: var(--paper); border: 1px solid var(--line); }
+  .log .bot .b { background: var(--dark); color: var(--light); }
+  .log .tool .b { background: transparent; color: var(--muted); padding-left: 0; }
+
+  /* 흐름 SVG */
+  .flowsvg { display: block; width: 100%; height: auto; max-height: 44vh; margin: 0 auto; }
+
+  /* 설정 패널 도식 */
+  .mock { background: var(--paper); border: 1px solid var(--line); border-radius: 16px; padding: 14px 16px; display: flex; flex-direction: column; gap: 8px; font-size: 12.5px; line-height: 1.35; color: var(--ink); }
+  .mock .mt { font-weight: 700; font-size: 15px; }
+  .mock .md { color: var(--muted); font-size: 11.5px; }
+  .mock .status { border: 1px solid var(--line); border-radius: 10px; padding: 6px 10px; display: grid; grid-template-columns: 112px 1fr; row-gap: 3px; column-gap: 10px; background: var(--light); }
+  .mock .status .k { color: var(--muted); }
+  .mock .status .v { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 11.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .mock .badge { display: inline-block; padding: 0 8px; border-radius: 999px; background: var(--green); color: #fff; font-weight: 700; font-size: 11px; font-family: 'Noto Sans KR', sans-serif; }
+  .mock .label { font-weight: 700; font-size: 12px; margin-top: 2px; }
+  .mock .field { display: flex; gap: 8px; align-items: center; }
+  .mock .input { flex: 1; border: 1px solid #c9c3b7; border-radius: 8px; padding: 5px 9px; font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 11.5px; background: #fff; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .mock .valid { font-size: 11px; color: var(--muted); }
+  .mock .valid b { color: var(--green); font-weight: 700; }
+  .mock .btns { display: flex; gap: 8px; flex-wrap: wrap; }
+  .mock .btn { border: 1px solid var(--dark); border-radius: 8px; padding: 5px 11px; font-weight: 700; font-size: 12px; background: #fff; white-space: nowrap; }
+  .mock .btn.primary { background: var(--dark); color: var(--light); }
+  .mock .step { display: inline-block; width: 16px; height: 16px; border-radius: 50%; background: var(--orange); color: var(--dark); font-size: 10px; font-weight: 700; text-align: center; line-height: 16px; margin-right: 4px; vertical-align: 1px; }
+  .mock .divider { border-top: 1px dashed var(--line); margin: 2px 0; }
+
+  /* 노트 미리보기 */
+  pre.note { margin: 0; background: var(--dark); color: var(--light); border-radius: 14px; padding: 12px 16px; font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 11px; line-height: 1.45; overflow: hidden; white-space: pre-wrap; word-break: break-all; }
+  pre.note .fm { color: var(--muted-dark); }
+  pre.note .hl { color: #F2B58A; }
+  pre.note .link { color: #8FC1EA; }
+  pre.note .conv { color: #A9DDB9; }
+
+  /* 시연 자리 */
+  .video { background: var(--dark); color: var(--light); border-radius: 18px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 1.2vh; min-height: 46vh; }
+  .video .play { width: 84px; height: 84px; border-radius: 50%; background: var(--orange); display: flex; align-items: center; justify-content: center; }
+  .video .play::after { content: ""; border-left: 30px solid var(--dark); border-top: 18px solid transparent; border-bottom: 18px solid transparent; margin-left: 8px; }
+  .cues { display: flex; flex-direction: column; gap: 1vh; }
+  .cue { display: flex; gap: 1vw; align-items: flex-start; background: var(--paper); border: 1px solid var(--line); border-radius: 12px; padding: 1.1vh 1.2vw; }
+  .cue .ts { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; color: var(--orange); font-weight: 700; min-width: 74px; font-size: clamp(12px, 1.1vw, 16px); padding-top: 0.2em; }
+
+  .arch-row { display: grid; grid-template-columns: 1.1fr 1fr; gap: 1.4vw; }
+
+  /* 7. 사서와 전화기 */
+  .lib { display: grid; grid-template-columns: 1.15fr 96px 1fr; align-items: stretch; }
+  .box { border-radius: 16px; padding: 12px 16px 10px; display: flex; flex-direction: column; gap: 4px; }
+  .box.lib-l { background: var(--dark); color: var(--light); }
+  .box.lib-r { background: var(--paper); border: 1px solid var(--line); }
+  .box h3 { font-size: clamp(15px, 1.4vw, 20px); }
+  .box .sub { font-size: 12px; margin-bottom: 4px; }
+  .box.lib-l .sub { color: var(--muted-dark); }
+  .box.lib-r .sub { color: var(--muted); }
+  .mrow { display: grid; grid-template-columns: 158px 1fr; gap: 10px; font-size: 12.5px; line-height: 1.35; padding: 4px 0; border-top: 1px dashed rgba(201,211,219,0.25); align-items: baseline; }
+  .box.lib-r .mrow { border-top-color: var(--line); }
+  .mrow code { font-size: 12px; font-weight: 700; color: #F2B58A; }
+  .box.lib-r .mrow code { color: var(--blue); }
+  .arrowcol { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px; padding: 0 4px; }
+  .arrowcol svg { width: 100%; height: auto; }
+  .arrowcol .xs { text-align: center; line-height: 1.3; }
+
+  /* 8. 다섯 단계 */
+  .steps { display: grid; grid-template-columns: repeat(5, 1fr); gap: 22px; }
+  .stp { position: relative; background: var(--paper); border: 1px solid var(--line); border-radius: 14px; padding: 10px 12px 12px; display: flex; flex-direction: column; gap: 5px; }
+  .stp:not(:last-child)::after { content: ""; position: absolute; right: -19px; top: 50%; width: 0; height: 0; border-left: 12px solid var(--orange); border-top: 8px solid transparent; border-bottom: 8px solid transparent; margin-top: -8px; }
+  .stp .n { width: 24px; height: 24px; border-radius: 50%; background: var(--orange); color: var(--dark); font-weight: 700; font-size: 13px; display: flex; align-items: center; justify-content: center; }
+  .stp .say { font-weight: 700; font-size: clamp(13px, 1.2vw, 17px); line-height: 1.3; }
+  .stp .fn { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 11.5px; color: var(--blue); font-weight: 700; line-height: 1.35; }
+  .stp .what { font-size: 12px; color: var(--muted); line-height: 1.35; }
+  .stp.auto { background: var(--dark); color: var(--light); border-color: var(--dark); }
+  .stp.auto .what { color: var(--muted-dark); }
+  .stp.auto .fn { color: #F2B58A; }
+
+  /* 9. 상태 그림 */
+  .statesvg { display: block; width: 100%; height: auto; max-height: 34vh; }
+
+  .footer { position: absolute; left: 7vw; right: 7vw; bottom: 2vh; display: flex; justify-content: space-between; font-size: 13px; color: var(--muted); gap: 2vw; }
+  .footer span:first-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .dark .footer { color: inherit; opacity: 0.8; }
+
+  .nav-hint { position: fixed; right: 16px; top: 10px; font-size: 13px; color: var(--muted-dark); opacity: 0.7; z-index: 9; }
+
+  @media (max-width: 900px) {
+    .row, .grid2, .grid4, .arch-row, .lib, .steps { display: flex; flex-direction: column; }
+    .stp:not(:last-child)::after { display: none; }
+    .slide { padding: 5vh 16px; min-height: auto; }
+    body { scroll-snap-type: none; height: auto; }
+    .footer { position: static; margin-top: 2vh; }
+    .nav-hint { display: none; }
+  }
+  @media print {
+    body { background: #fff; height: auto; overflow: visible; scroll-snap-type: none; }
+    .slide { page-break-after: always; min-height: 0; height: 190mm; padding: 12mm 16mm; }
+    .flowsvg { max-height: 120mm; }
+    .statesvg { max-height: 80mm; }
+    .nav-hint { display: none; }
+  }
+</style>
+</head>
+<body>
+
+<!-- 1. 표지 -->
+<section class="slide dark" id="s1">
+  <p class="eyebrow">DeskMate 기능 1 · 팀 공유</p>
+  <div class="spacer"></div>
+  <h1>Bookmark Insight<br><span style="color:var(--orange)">북마크 인사이트</span></h1>
+  <p class="lead muted">이번 주에 저장한 Chrome 북마크를 로봇이 읽고 묶어서, 질문 하나로 말을 겁니다.<br>대화는 노트에 남습니다.</p>
+  <div class="spacer"></div>
+  <div class="footer"><span>MuJoCo 시뮬 + 실제 Chrome 북마크로 확인</span><span>2026.11.14 · 1 / 11</span></div>
+</section>
+
+<!-- 2. 한 문장 + 흐름 -->
+<section class="slide" id="s2">
+  <p class="eyebrow">한 문장으로</p>
+  <h2>사용자는 Cmd+D만 누릅니다. 나머지는 로봇이 합니다</h2>
+  <svg class="flowsvg" viewBox="0 0 1200 250" role="img" aria-label="Chrome 북마크에서 md 저장소, 요약과 묶음, 로봇 대화, 노트 기록까지의 흐름">
+    <defs>
+      <marker id="ah" markerWidth="10" markerHeight="10" refX="9" refY="5" orient="auto" markerUnits="userSpaceOnUse"><path d="M0,0 L10,5 L0,10 z" fill="#E07A3F"/></marker>
+    </defs>
+    <style>
+      .flowsvg text { font-family: 'Noto Sans KR', 'Apple SD Gothic Neo', 'Malgun Gothic', sans-serif; font-size: 16px; fill: #1F2A33; }
+      .flowsvg .ttl { font-size: 19px; font-weight: 700; }
+      .flowsvg .sub { font-size: 13.5px; fill: #4A5568; }
+      .flowsvg .mono { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 13px; fill: #3A86C8; font-weight: 700; }
+      .flowsvg .node { fill: #FFFFFF; stroke: #E3DED4; stroke-width: 1.5; }
+      .flowsvg .node.out { fill: #1F2A33; stroke: #1F2A33; }
+      .flowsvg .node.hl { stroke: #E07A3F; stroke-width: 2.5; }
+      .flowsvg .on-dark { fill: #F7F4EE; }
+      .flowsvg .on-dark-sub { fill: #C9D3DB; }
+      .flowsvg .arrow { stroke: #E07A3F; stroke-width: 2.5; fill: none; marker-end: url(#ah); }
+      .flowsvg .who { font-size: 13px; fill: #E07A3F; font-weight: 700; }
+    </style>
+    <rect class="node" x="0" y="40" width="212" height="120" rx="16"/>
+    <text class="ttl" x="106" y="78" text-anchor="middle">Chrome 북마크</text>
+    <text class="sub" x="106" y="104" text-anchor="middle">사용자는 Cmd+D만</text>
+    <text class="mono" x="106" y="128" text-anchor="middle">AccountBookmarks</text>
+    <text class="who" x="106" y="190" text-anchor="middle">사용자</text>
+    <path class="arrow" d="M214,100 H242"/>
+    <rect class="node" x="247" y="40" width="212" height="120" rx="16"/>
+    <text class="ttl" x="353" y="78" text-anchor="middle">md 저장소</text>
+    <text class="sub" x="353" y="104" text-anchor="middle">북마크 1개 = 파일 1개</text>
+    <text class="mono" x="353" y="128" text-anchor="middle">bookmarks/&lt;profile&gt;/</text>
+    <text class="who" x="353" y="190" text-anchor="middle">동기화 · 363건 0.1초</text>
+    <path class="arrow" d="M461,100 H489"/>
+    <rect class="node" x="494" y="40" width="212" height="120" rx="16"/>
+    <text class="ttl" x="600" y="78" text-anchor="middle">요약 · 묶음</text>
+    <text class="sub" x="600" y="104" text-anchor="middle">본문 읽기 → 주제 · 관계 · 질문</text>
+    <text class="mono" x="600" y="128" text-anchor="middle">insights/*.md</text>
+    <text class="who" x="600" y="190" text-anchor="middle">배치 (Gemini Flash) · 66초</text>
+    <path class="arrow" d="M708,100 H736"/>
+    <rect class="node hl" x="741" y="40" width="212" height="120" rx="16"/>
+    <text class="ttl" x="847" y="78" text-anchor="middle">로봇 대화</text>
+    <text class="sub" x="847" y="104" text-anchor="middle">묶음 하나 + 질문 하나</text>
+    <text class="mono" x="847" y="128" text-anchor="middle">get_insight</text>
+    <text class="who" x="847" y="190" text-anchor="middle">실시간 (Gemini Live)</text>
+    <path class="arrow" d="M955,100 H983"/>
+    <rect class="node out" x="988" y="40" width="212" height="120" rx="16"/>
+    <text class="ttl on-dark" x="1094" y="78" text-anchor="middle">노트에 대화 기록</text>
+    <text class="sub on-dark-sub" x="1094" y="104" text-anchor="middle">결론 + 대화 원문(접힘)</text>
+    <text class="mono on-dark" x="1094" y="128" text-anchor="middle">finish_insight</text>
+    <text class="who" x="1094" y="190" text-anchor="middle">"정리해 줘"</text>
+    <path d="M0,215 H706" stroke="#C9D3DB" stroke-width="1.5"/>
+    <text class="sub" x="353" y="240" text-anchor="middle">LLM 없이 뒤에서 돕니다. 결과는 파일로 남습니다</text>
+    <path d="M741,215 H1200" stroke="#E07A3F" stroke-width="1.5"/>
+    <text class="sub" x="970" y="240" text-anchor="middle" style="fill:#E07A3F">사용자가 보는 30초</text>
+  </svg>
+  <div class="row">
+    <div class="card"><h3>사용자가 하는 말은 두 마디입니다</h3><p class="muted small">"이번 주 북마크 얘기하자", 그리고 "정리해 줘". 왜 저장했는지 묻지 않고, 읽었는지도 따지지 않아요.</p></div>
+    <div class="card dark"><h3 style="color:var(--orange)">로봇은 노트에 적힌 것만 말합니다</h3><p class="small">기억이나 추측으로 북마크 내용을 말하지 않아요. 노트가 없으면 "잠깐 훑어볼게" 하고 뒤에서 만든 다음, 돌아와서 말해요.</p></div>
+  </div>
+  <div class="footer"><span>프로필 deskmate_ko · 다정한 반말 · 한 번 말할 때 묶음 하나, 질문 하나</span><span>2 / 11</span></div>
+</section>
+
+<!-- 3. 설정 페이지 도식 -->
+<section class="slide" id="s3">
+  <p class="eyebrow">사용자가 보는 것</p>
+  <h2>설정 페이지에 칸이 하나 생겼습니다</h2>
+  <div class="arch-row">
+    <div class="mock" aria-label="설정 패널 도식">
+      <div class="mt">Bookmark Insight</div>
+      <div class="md">Chrome 북마크를 마크다운 저장소로 동기화하는 첫 세팅을 터미널 없이 끝냅니다. 프로필 탐색 → 저장소 폴더 → .env 적용 → 동기화.</div>
+      <div class="status">
+        <span class="k">설정 상태</span><span class="v"><span class="badge">설정됨</span></span>
+        <span class="k">북마크 저장소</span><span class="v">~/Documents/obsidian-note/bookmarks</span>
+        <span class="k">Chrome User Data</span><span class="v">~/Library/Application Support/Google/Chrome (자동)</span>
+        <span class="k">허용 프로필</span><span class="v">Default</span>
+        <span class="k">프로필별 북마크</span><span class="v">Default 363</span>
+        <span class="k">마지막 동기화</span><span class="v">2026-11-13 22:10</span>
+      </div>
+      <div class="label"><span class="step">2</span>북마크 저장소 폴더</div>
+      <div class="field"><div class="input">~/Documents/obsidian-note/bookmarks</div><div class="btn">폴더 만들기·적용</div></div>
+      <div class="valid"><b>폴더 있음</b> · 쓸 수 있음 · 북마크 363개 · <b>옵시디언 볼트 안 (obsidian-note)</b></div>
+      <div class="btns"><div class="btn"><span class="step">1</span>프로필 탐색</div><div class="btn primary"><span class="step">3</span>.env에 적용</div><div class="btn"><span class="step">4</span>동기화 실행</div></div>
+      <div class="divider"></div>
+      <div class="label">데모 데이터 (실제 Chrome 없이 시뮬 데모)</div>
+      <div class="field"><div class="input">~/bookmark-insight-demo</div><div class="btn">데모 데이터 준비</div></div>
+    </div>
+    <div style="display:flex;flex-direction:column;gap:1.4vh">
+      <div class="card dark">
+        <h3 style="color:var(--orange)">버튼 네 개, 재시작 없음</h3>
+        <ul class="small">
+          <li><b>프로필 탐색.</b> 내 PC의 Chrome 프로필을 표로 보여 줍니다. 마지막에 쓴 프로필이 기본으로 체크됩니다.</li>
+          <li><b>폴더 만들기·적용.</b> 입력하는 동안 폴더가 있는지, 쓸 수 있는지, 옵시디언 볼트 안인지 한 줄로 알려 줍니다.</li>
+          <li><b>.env에 적용.</b> 저장하면 실행 중인 앱에 바로 반영됩니다.</li>
+          <li><b>동기화 실행.</b> created / updated / archived / excluded 개수를 표로 보여 줍니다.</li>
+        </ul>
+      </div>
+      <div class="card">
+        <h3>설정 전에 말을 걸면</h3>
+        <p class="muted small">로봇이 북마크 내용을 지어내지 않아요. "127.0.0.1:7860 설정 페이지에서 버튼 네 개를 차례로 누르면 된다"고 두 문장으로 안내해요. 다 하고 "설정했어"라고 하면 그대로 이어져요.</p>
+      </div>
+      <p class="muted xs">버튼 네 개는 모두 <code>bookmark_insight</code> 패키지 함수를 바로 부릅니다. 셸 명령은 없습니다. 옵시디언 볼트는 전역 설정 파일에서 찾아 저장소 위치를 추천합니다.</p>
+    </div>
+  </div>
+  <div class="footer"><span>도식은 실제 패널의 구성을 그대로 옮겼습니다 · 실제 화면은 시연에서</span><span>3 / 11</span></div>
+</section>
+
+<!-- 4. 시연 -->
+<section class="slide" id="s4">
+  <p class="eyebrow">시연</p>
+  <h2>설정 안 된 상태에서 노트가 남기까지 4분</h2>
+  <div class="row">
+    <div class="video">
+      <div class="play"></div>
+      <p class="lead">영상 재생</p>
+      <p class="muted small">2026-11-13 22:09 ~ 22:13 · MuJoCo 시뮬 + 실제 Chrome 북마크</p>
+    </div>
+    <div class="cues">
+      <div class="cue"><span class="ts">22:09:42</span><p class="small"><b>설정 안 됨.</b> "이번 주 북마크 인사이트 분석해 줄래?" → get_insight가 not_configured를 돌려주고, 로봇이 설정 페이지로 안내합니다.</p></div>
+      <div class="cue"><span class="ts">22:10</span><p class="small"><b>버튼 네 개.</b> 프로필 탐색, 폴더 만들기·적용, .env에 적용, 동기화 실행. 363건, 재시작 없음.</p></div>
+      <div class="cue"><span class="ts">22:11:19</span><p class="small"><b>"설정했어" → "잠깐 훑어볼게".</b> 1초마다 신호음과 안테나로 일하는 중이라고 알립니다. build_insight 66초 뒤 묶음 하나와 질문 하나로 돌아옵니다.</p></div>
+      <div class="cue"><span class="ts">22:13:29</span><p class="small"><b>"정리해 줘" → 노트.</b> finish_insight가 결론과 대화 원문을 노트에 덧붙입니다. "잘 자" → 슬립.</p></div>
+    </div>
+  </div>
+  <div class="footer"><span>영상이 안 되면 다음 두 장(대화 기록, 노트)으로 대신합니다</span><span>4 / 11</span></div>
+</section>
+
+<!-- 5. 실제 대화 기록 -->
+<section class="slide" id="s5">
+  <p class="eyebrow">실제 대화 기록 (오늘 밤 22:09 ~ 22:13)</p>
+  <h2>로그 그대로입니다. 긴 줄만 잘랐습니다</h2>
+  <div class="log">
+    <div class="line me"><span class="t">22:09:42</span><span class="w">사용자</span><span class="b">이번 주 북마크 인사이트 분석해 줄래? <span class="chip">get_insight → not_configured</span></span></div>
+    <div class="line bot"><span class="t">22:09:51</span><span class="w">리치미니</span><span class="b">아직 북마크 인사이트 기능이 설정되지 않았어. 설정 페이지에서 관련 항목을 확인해 주면 분석해 줄 수 있어.</span></div>
+    <div class="line me"><span class="t">22:10:12</span><span class="w">사용자</span><span class="b">설정했어. <span class="chip">get_insight 352 ms → generating</span> <span class="chip">build_insight 시작</span></span></div>
+    <div class="line bot"><span class="t">22:10:14</span><span class="w">리치미니</span><span class="b">잠깐 훑어볼게.</span></div>
+    <div class="line tool"><span class="t">22:11:19</span><span class="w"></span><span class="b"><span class="chip">build_insight 완료</span> status=ready · 65.9초 · 이번 주 북마크 3건 → 묶음 1개</span></div>
+    <div class="line bot"><span class="t">22:11:41</span><span class="w">리치미니</span><span class="b">이번 주는 실시간 회의 요약 서비스부터 보안과 비용 절감을 위한 로컬 LLM, 그리고 사내 데이터를 활용한 RAG 시스템 구축까지 다양한 AI 활용 방안을 모아봤어. … 로컬 LLM이나 RAG 방식을 새로 적용해보고 싶은 영역이 있어?</span></div>
+    <div class="line me"><span class="t">22:12:14</span><span class="w">사용자</span><span class="b">일단은 내 로컬에 세컨드 브레인이라는 느낌으로 나만을 위한 데이터베이스를 만들고 싶고 … <span class="chip">play_emotion</span></span></div>
+    <div class="line bot"><span class="t">22:13:22</span><span class="w">리치미니</span><span class="b">보안 문제 해결을 위한 로컬 LLM 환경 구축과 사내 데이터를 연동하는 RAG 아키텍처 실무 적용법을 추천해.</span></div>
+    <div class="line me"><span class="t">22:13:29</span><span class="w">사용자</span><span class="b">고마워. 오늘 나눈 대화 기반으로 인사이트 노트 작성해 줘. <span class="chip">finish_insight → 노트</span></span></div>
+    <div class="line bot"><span class="t">22:13:39</span><span class="w">리치미니</span><span class="b">오늘 나눈 대화 내용을 바탕으로 인사이트 노트를 잘 정리해 둘게.</span></div>
+  </div>
+  <div class="footer"><span>출처는 앱 로그입니다 (role=user / role=assistant / Used tool) · 22:13:44 "잘 자" → go_to_sleep</span><span>5 / 11</span></div>
+</section>
+
+<!-- 6. 노트 -->
+<section class="slide" id="s6">
+  <p class="eyebrow">노트가 남는 모습</p>
+  <h2>옵시디언에서도, 그냥 md 뷰어에서도 열립니다</h2>
+  <div class="arch-row">
+<pre class="note"><span class="fm">---
+profile: Default
+since: 2026-11-07
+until: 2026-11-13
+complete: true
+<span class="hl">related:</span>
+  - "[[2026-11-07 Tactiq AI Note Taker for Google Meet … 159b4f]]"
+  - "[[2026-11-13 (펌)뉴비가이드 로컬 LLM에 대한 모든 것 … 4f3654]]"
+  - "[[2026-11-13 RAG, 들어는 봤는데… 우아한형제들 기술블로그 bdd77b]]"
+---</span>
+# 북마크 인사이트 (2026-11-07 ~ 2026-11-13)
+
+## 실무 AI 솔루션 및 로컬/RAG 시스템 활용 기술
+
+- <span class="link">[Tactiq: AI Note Taker for Google Meet …](https://tactiq.io/)</span>
+- <span class="link">[(펌)[뉴비가이드] 로컬 LLM에 대한 모든 것 …](https://arca.live/b/alpaca/186989322)</span>
+- <span class="link">[RAG, 들어는 봤는데… 내 서비스엔 어떻게 쓰지?](https://techblog.woowahan.com/25900/)</span>
+
+**관계**: Tactiq 완성형 서비스 → 로컬 LLM 구축 가이드 → RAG 실무 적용법으로 깊이를 확장 …
+**질문**: 보안 강화나 환각 감소를 위해 로컬 LLM이나 RAG를 새로 적용해보고 싶은 영역이 있나요?
+
+<span class="conv">## 대화 기록 (2026-11-13 22:13)
+보안성 강화와 효율적인 데이터 관리를 위해 로컬 LLM과 RAG를 활용한 나만의 세컨드 브레인
+구축을 목표로 하고 있습니다. …</span></pre>
+    <div style="display:flex;flex-direction:column;gap:1.4vh">
+      <div class="card"><h3><code>related:</code>는 옵시디언 그래프용입니다</h3><p class="muted small">머리말의 <code>[[위키링크]]</code>가 북마크 파일과 노트를 이어 줘요. 그래프 뷰와 백링크에만 쓰고, 본문에는 안 넣어요.</p></div>
+      <div class="card"><h3>본문은 어디서나 열리는 웹 링크입니다</h3><p class="muted small">볼트 밖이든 깃허브든 VS Code든, 제목을 누르면 원문으로 가요. 어젯밤까지는 본문도 <code>[[링크]]</code>라서 볼트 밖에서는 전부 "찾을 수 없음"이 떴어요.</p></div>
+      <div class="card dark"><h3 style="color:var(--orange)">대화 기록 절은 대화가 끝난 뒤 붙습니다</h3><p class="small">배치가 요약, 관계, 질문을 쓰고, finish_insight가 결론 한 단락과 대화 원문(접힘)을 덧붙여요. 같은 기간을 다시 열면 절이 하나 더 쌓여요.</p></div>
+      <p class="muted xs"><code>insights/Default/2026-11-07_2026-11-13.md</code> · 기간당 노트 1개 · 북마크 파일도 사람이 읽는 md</p>
+    </div>
+  </div>
+  <div class="footer"><span>출처는 오늘 밤 실제로 생성된 노트입니다 (줄임표는 발표용 축약)</span><span>6 / 11</span></div>
+</section>
+
+<!-- 7. 사서 한 명 -->
+<section class="slide" id="s7">
+  <p class="eyebrow">코드 구조 1 / 3</p>
+  <h2>우리가 만든 것은 사서 한 명입니다</h2>
+  <div class="lib">
+    <div class="box lib-l">
+      <h3 style="color:var(--orange)">사서 <code style="font-weight:500;font-size:0.75em;color:var(--muted-dark)">src/bookmark_insight/</code></h3>
+      <div class="sub">로봇 앱을 몰라도 혼자 일합니다. 혼자 테스트가 됩니다.</div>
+      <div class="mrow"><code>sync/</code><span>Chrome 북마크를 md 책꽂이로 옮겨 적습니다</span></div>
+      <div class="mrow"><code>summarize/</code><span>책마다 한 줄 요약 카드. 웹 페이지를 읽고 Gemini에 요약을 맡깁니다</span></div>
+      <div class="mrow"><code>insight/</code><span>이번 주 책을 주제별로 묶고 질문 하나를 붙여 노트 한 장을 씁니다</span></div>
+      <div class="mrow"><code>session.py</code><span>지금 상담 중인지 적어 두는 수첩</span></div>
+      <div class="mrow"><code>api.py</code><span>요청 창구. get_insight / build_insight / finish_insight …</span></div>
+      <div class="mrow"><code>settings.py</code><span>BOOKMARK_INSIGHT_* 환경 변수</span></div>
+      <div class="mrow"><code>obsidian.py</code><span>옵시디언 볼트 찾기</span></div>
+      <div class="mrow"><code>mcp_server.py</code><span>다른 프로그램도 같은 창구를 쓰는 문</span></div>
+    </div>
+    <div class="arrowcol">
+      <svg viewBox="0 0 80 40" aria-hidden="true"><path d="M76,20 H14" stroke="#E07A3F" stroke-width="4" fill="none"/><path d="M18,8 L4,20 L18,32 z" fill="#E07A3F"/></svg>
+      <p class="xs muted">전화기가<br>사서를 부릅니다<br>반대는 없습니다</p>
+    </div>
+    <div class="box lib-r">
+      <h3>전화기 <code style="font-weight:500;font-size:0.75em;color:var(--muted)">src/reachy_mini_conversation_app/</code></h3>
+      <div class="sub">얇습니다. 로봇 앱과 사서를 잇는 선만 있습니다.</div>
+      <div class="mrow"><code>tools/ 5개</code><span>LLM이 누르는 버튼. 창구 함수를 한 줄로 부릅니다</span></div>
+      <div class="mrow"><code>…_hooks.py</code><span>손님이 말이 없거나 로봇이 잠들면 상담을 자동으로 끝냅니다</span></div>
+      <div class="mrow"><code>…_progress.py</code><span>일하는 동안 1초마다 띵 소리와 안테나</span></div>
+      <div class="mrow"><code>…_transcript_log.py</code><span>대화 원문을 날짜별 파일로 남깁니다</span></div>
+      <div class="mrow"><code>…_routes.py</code><span>설정 페이지 버튼 네 개가 부르는 함수</span></div>
+    </div>
+  </div>
+  <ul class="small">
+    <li>사서는 로봇 앱을 import하지 않습니다. 가짜 Chrome, 가짜 HTTP, 가짜 LLM으로 혼자 테스트가 됩니다.</li>
+    <li>전화기는 얇습니다. LLM이 버튼을 누르면 창구 함수를 한 줄로 부르고, 소리와 안테나만 앱 쪽에서 붙입니다.</li>
+    <li>화살표는 한 방향입니다. 전화기가 사서를 부르고, 사서는 전화기를 모릅니다. 그래서 MCP 서버 같은 다른 전화기도 같은 창구를 씁니다.</li>
+  </ul>
+  <div class="footer"><span>패키지 이름은 오늘 밤 deskmate에서 bookmark_insight로 바꿨습니다. DeskMate는 프로젝트 전체 이름이라서요</span><span>7 / 11</span></div>
+</section>
+
+<!-- 8. 다섯 단계 -->
+<section class="slide" id="s8">
+  <p class="eyebrow">코드 구조 2 / 3</p>
+  <h2>"이번 주 북마크 이야기하자"라고 하면</h2>
+  <div class="steps">
+    <div class="stp">
+      <div class="n">1</div>
+      <div class="say">말을 겁니다</div>
+      <div class="fn">get_insight<br>→ api.get_insight</div>
+      <div class="what">먼저 sync로 책꽂이를 최신으로 (0.1초). 노트가 있으면 ready, 없으면 "만들어라"</div>
+    </div>
+    <div class="stp">
+      <div class="n">2</div>
+      <div class="say">"잠깐 훑어볼게"</div>
+      <div class="fn">build_insight<br>summarize → insight</div>
+      <div class="what">백그라운드로 돕니다. progress가 1초마다 띵. 카드 없는 책만 요약하고 노트를 씁니다 (66초)</div>
+    </div>
+    <div class="stp">
+      <div class="n">3</div>
+      <div class="say">대화</div>
+      <div class="fn">ready<br>→ session.open</div>
+      <div class="what">수첩을 펴고, LLM이 두 문장과 질문 하나로 말합니다</div>
+    </div>
+    <div class="stp">
+      <div class="n">4</div>
+      <div class="say">"정리해 줘"</div>
+      <div class="fn">finish_insight</div>
+      <div class="what">노트 끝 <code>## 대화 기록</code>에 결론을 쓰고 수첩을 닫습니다</div>
+    </div>
+    <div class="stp auto">
+      <div class="n">5</div>
+      <div class="say">말이 없으면</div>
+      <div class="fn">hooks<br>→ session.auto_finish</div>
+      <div class="what">무응답 10분, 슬립, 앱 종료. 앱이 대신 수첩을 닫고 <code>_자동 종료_</code>만 적습니다</div>
+    </div>
+  </div>
+  <ul class="small">
+    <li>get_insight는 무거운 일을 하지 않습니다. sync로 책꽂이를 맞추고(363건 0.1초), 노트가 있으면 ready, 없으면 generating을 돌려줍니다.</li>
+    <li>build_insight는 BackgroundToolManager 위에서 돕니다. summarize가 카드 없는 책만 요약하고, insight가 묶음, 관계, 질문을 노트에 씁니다. 오늘 밤 실측 66초, 그 안에 Gemini 504 한 번이 들어 있습니다.</li>
+    <li>ready가 되면 api가 session.open으로 수첩을 폅니다. "정리해 줘"면 finish_insight가 노트 끝 <code>## 대화 기록</code>에 결론을 쓰고 수첩을 닫습니다.</li>
+    <li>말이 없으면(기본 10분), 로봇이 잠들면, 앱이 꺼지면 hooks가 대신 수첩을 닫고 <code>_자동 종료_</code>만 적습니다. 여기에는 LLM이 끼지 않습니다.</li>
+  </ul>
+  <div class="footer"><span>함수 이름은 src/bookmark_insight/api.py · session.py · bookmark_insight_hooks.py 그대로입니다</span><span>8 / 11</span></div>
+</section>
+
+<!-- 9. 세션 상태 -->
+<section class="slide" id="s9">
+  <p class="eyebrow">코드 구조 3 / 3</p>
+  <h2>상담 수첩(세션)이 열리고 닫히는 세 가지 길</h2>
+  <svg class="statesvg" viewBox="0 0 1200 330" role="img" aria-label="닫힘에서 열림으로, 다시 닫힘으로 가는 세 가지 길">
+    <defs>
+      <marker id="ah2" markerWidth="10" markerHeight="10" refX="9" refY="5" orient="auto" markerUnits="userSpaceOnUse"><path d="M0,0 L10,5 L0,10 z" fill="#E07A3F"/></marker>
+      <marker id="ah3" markerWidth="10" markerHeight="10" refX="9" refY="5" orient="auto" markerUnits="userSpaceOnUse"><path d="M0,0 L10,5 L0,10 z" fill="#4A5568"/></marker>
+    </defs>
+    <style>
+      .statesvg text { font-family: 'Noto Sans KR', 'Apple SD Gothic Neo', 'Malgun Gothic', sans-serif; font-size: 15px; fill: #1F2A33; }
+      .statesvg .st { font-size: 24px; font-weight: 700; }
+      .statesvg .mono { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 14px; font-weight: 700; fill: #3A86C8; }
+      .statesvg .lab { font-size: 14px; fill: #4A5568; }
+      .statesvg .tag { font-size: 14px; font-weight: 700; fill: #E07A3F; }
+      .statesvg .arrow { stroke: #E07A3F; stroke-width: 2.5; fill: none; marker-end: url(#ah2); }
+      .statesvg .arrow.gray { stroke: #4A5568; stroke-dasharray: 7 6; marker-end: url(#ah3); }
+    </style>
+    <!-- 닫힘 (왼쪽) -->
+    <rect x="20" y="115" width="180" height="100" rx="50" fill="#FFFFFF" stroke="#E3DED4" stroke-width="1.5"/>
+    <text class="st" x="110" y="174" text-anchor="middle">닫힘</text>
+    <!-- 열림 (중앙) -->
+    <rect x="510" y="105" width="200" height="120" rx="60" fill="#1F2A33"/>
+    <text class="st" x="610" y="160" text-anchor="middle" fill="#F7F4EE" style="fill:#F7F4EE">열림</text>
+    <text class="lab" x="610" y="190" text-anchor="middle" style="fill:#C9D3DB">상담 중</text>
+    <!-- 닫힘 (오른쪽) -->
+    <rect x="1000" y="115" width="180" height="100" rx="50" fill="#FFFFFF" stroke="#E3DED4" stroke-width="1.5"/>
+    <text class="st" x="1090" y="174" text-anchor="middle">닫힘</text>
+    <!-- 열기 -->
+    <path class="arrow" d="M202,165 H506"/>
+    <text class="mono" x="354" y="150" text-anchor="middle">get_insight → ready</text>
+    <text class="lab" x="354" y="192" text-anchor="middle">api가 session.open으로 수첩을 펼칩니다</text>
+    <!-- (a) 위 -->
+    <path class="arrow" d="M700,120 C780,40 920,40 1005,122"/>
+    <text class="tag" x="855" y="48" text-anchor="middle">(a) finish_insight</text>
+    <text class="lab" x="855" y="70" text-anchor="middle">"정리해 줘". 결론을 노트에 저장하고 닫습니다</text>
+    <!-- (b) 아래 -->
+    <path class="arrow" d="M700,212 C780,290 920,290 1005,210"/>
+    <text class="tag" x="855" y="262" text-anchor="middle">(b) hooks → auto_finish</text>
+    <text class="lab" x="855" y="284" text-anchor="middle">무응답 10분, 슬립, 앱 종료. 자동 종료 표시만 남깁니다</text>
+    <!-- (c) 안전망 -->
+    <path class="arrow gray" d="M1090,218 V300 H740"/>
+    <text class="tag" x="740" y="327" text-anchor="start" style="fill:#4A5568">(c) take_last_closed</text>
+    <text class="lab" x="900" y="327" text-anchor="start">너무 일찍 닫혔으면 결론을 한 번 더 붙일 수 있습니다</text>
+  </svg>
+  <div class="grid2">
+    <div class="card">
+      <ul class="small">
+        <li><b>(a) 명시 종료.</b> LLM이 finish_insight를 부릅니다. 결론 한 단락과 대화 원문이 노트에 붙습니다.</li>
+        <li><b>(b) 자동 종료.</b> 무응답 10분(기본), 슬립, 앱 종료. hooks가 auto_finish를 부르고 <code>_자동 종료_</code>만 적습니다. LLM은 끼지 않습니다.</li>
+        <li><b>(c) 안전망.</b> 수첩이 먼저 닫힌 뒤에 결론이 오면, session.take_last_closed로 마지막 노트에 한 번만 더 붙입니다.</li>
+      </ul>
+    </div>
+    <div class="card dark">
+      <h3 style="color:var(--orange)">설정이 안 됐을 때</h3>
+      <p class="small">get_insight가 설정 페이지 주소를 돌려주고, 로봇이 말로 안내합니다. 설정값은 호출마다 다시 읽어서 재시작이 없습니다.</p>
+    </div>
+  </div>
+  <div class="footer"><span>src/bookmark_insight/session.py · open / close / close_if_idle / auto_finish / take_last_closed</span><span>9 / 11</span></div>
+</section>
+
+<!-- 10. 고친 문제 5건 -->
+<section class="slide" id="s10">
+  <p class="eyebrow">시뮬에서 돌려 보고 고친 것</p>
+  <h2>이번에 고친 문제 5건</h2>
+  <table>
+    <tr><th style="width:26%">증상</th><th style="width:32%">원인</th><th style="width:33%">고친 것</th><th style="width:9%">커밋</th></tr>
+    <tr><td><b>긴 도구가 도는 동안 로봇이 침묵</b></td><td>Gemini는 한 메시지의 도구 응답을 함께 받아야 합니다</td><td>도구 응답을 메시지 단위로 묶어서 보냅니다</td><td><code>cb6604c</code></td></tr>
+    <tr><td><b>첫 요약이 14분</b></td><td>SDK 기본 재시도가 503을 숨기고 기다립니다</td><td>30초 타임아웃, 재시도 2회, thinking 0</td><td><code>8150ee9</code></td></tr>
+    <tr><td><b>인사할 때 같은 말을 두 번</b></td><td>감정 동작 결과가 새 생성을 유발합니다</td><td>결과를 NON_BLOCKING + SILENT로 보냅니다</td><td><code>8542368</code></td></tr>
+    <tr><td><b>설정 UI 저장이 재시작 뒤 사라짐</b></td><td>CLI로 띄우면 instance_path가 없습니다</td><td>앱이 읽은 <code>.env</code>로 폴백합니다</td><td><code>687c38b</code></td></tr>
+    <tr><td><b>노트 링크가 "찾을 수 없음"</b></td><td>저장소가 볼트 밖이고, 파일명에 <code>[ ]</code>가 들어갑니다</td><td>본문은 웹 링크, 그래프용 related는 볼트 안일 때만, 파일명 정리</td><td><code>5ca6df8</code></td></tr>
+  </table>
+  <p class="muted small">다섯 건 모두 테스트는 초록이었습니다. 시뮬에 실제 Chrome 북마크를 넣고 대화를 돌리다 나왔습니다. 시연 전에 한 바퀴 실측이 필요합니다.</p>
+  <div class="footer"><span>각 수정에 회귀 테스트를 같이 넣었습니다</span><span>10 / 11</span></div>
+</section>
+
+<!-- 11. PR #11 · 다음 단계 -->
+<section class="slide dark" id="s11">
+  <p class="eyebrow">팀 PR #11</p>
+  <h2>PR #11 현황 · 다음 단계</h2>
+  <div class="row">
+    <div class="card dark">
+      <h3 style="color:var(--orange)">현황 (오늘 밤 기준)</h3>
+      <table class="small">
+        <tr><td style="width:36%">저장소</td><td>orocapangyo/<br>reachy_mini_conversation_app</td></tr>
+        <tr><td>상태</td><td><span class="pill green">OPEN</span> <span class="pill blue">MERGEABLE</span></td></tr>
+        <tr><td>커밋</td><td>70개</td></tr>
+        <tr><td>리뷰</td><td>0건</td></tr>
+        <tr><td>테스트</td><td>807개 통과 (웹캠 테스트 1개 제외)</td></tr>
+      </table>
+    </div>
+    <div class="card dark">
+      <h3 style="color:var(--orange)">부탁 세 가지</h3>
+      <ul class="small">
+        <li><b>리뷰어 지정.</b> 한 명이면 됩니다. <code>src/bookmark_insight/api.py</code> → <code>tools/get_insight.py</code> → <code>profiles/deskmate_ko</code> 순서를 권합니다.</li>
+        <li><b>Actions / CI 승인.</b> 포크에서 온 PR이라 워크플로 실행에 승인이 필요합니다.</li>
+        <li><b>머지 순서.</b> 겹치는 파일은 <code>console.py</code>, <code>README.md</code>, <code>.env.example</code>입니다. 먼저 들어가는 쪽이 정해지면 나머지가 리베이스합니다.</li>
+      </ul>
+    </div>
+    <div class="card dark">
+      <h3 style="color:var(--orange)">다음 넷</h3>
+      <ul class="small">
+        <li><b>리뷰 반영, 머지.</b> 머지 전까지 브랜치에는 리뷰 대응 커밋만 올립니다.</li>
+        <li><b>기존 파일명 정리 명령.</b> 새 파일명 규칙은 새 파일에만 적용됩니다. 이미 있는 363개 이름을 바꾸는 명령 하나가 필요합니다.</li>
+        <li><b>최근 1~2건 먼저 요약.</b> 66초를 기다리지 않고 방금 저장한 것부터 말을 겁니다.</li>
+        <li><b>회의 모드.</b> 마이크 게이트로 Meet 소리를 막습니다.</li>
+      </ul>
+    </div>
+  </div>
+  <div class="footer"><span>gh pr view 11 기준 · 숫자는 발표 직전 다시 확인합니다 · 설계 문서 oss_plan/2026-11-06-weekly-insight-design.md</span><span>11 / 11</span></div>
+</section>
+
+<div class="nav-hint">← → 또는 ↑ ↓ 로 넘기기</div>
+<script>
+  (function () {
+    var slides = Array.prototype.slice.call(document.querySelectorAll('.slide'));
+    function current() {
+      var y = window.scrollY + window.innerHeight / 2;
+      for (var i = 0; i < slides.length; i++) {
+        var top = slides[i].offsetTop;
+        if (y >= top && y < top + slides[i].offsetHeight) return i;
+      }
+      return 0;
+    }
+    function go(i) {
+      i = Math.max(0, Math.min(slides.length - 1, i));
+      slides[i].scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
+    document.addEventListener('keydown', function (e) {
+      if (e.key === 'ArrowRight' || e.key === 'ArrowDown' || e.key === 'PageDown' || e.key === ' ') { e.preventDefault(); go(current() + 1); }
+      else if (e.key === 'ArrowLeft' || e.key === 'ArrowUp' || e.key === 'PageUp') { e.preventDefault(); go(current() - 1); }
+      else if (e.key === 'Home') { go(0); }
+      else if (e.key === 'End') { go(slides.length - 1); }
+    });
+  })();
+</script>
+</body>
+</html>

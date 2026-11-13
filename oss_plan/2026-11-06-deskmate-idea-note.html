@@ -1,0 +1,1093 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>리치미니 데스크메이트 아이디어 노트</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;500;700&display=swap">
+<style>
+  :root {
+    --dark: #1F2A33;
+    --light: #F7F4EE;
+    --paper: #FFFFFF;
+    --line: #E3DED4;
+    --ink: #1F2A33;
+    --muted: #4A5568;
+    --muted-dark: #C9D3DB;
+    --orange: #E07A3F;
+    --blue: #3A86C8;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; background: var(--dark); color: var(--ink); font-family: 'Noto Sans KR', 'Apple SD Gothic Neo', 'Malgun Gothic', sans-serif; }
+  body { scroll-snap-type: y mandatory; overflow-y: scroll; height: 100vh; }
+
+  .slide {
+    scroll-snap-align: start;
+    min-height: 100vh;
+    padding: 6vh 8vw;
+    display: flex;
+    flex-direction: column;
+    gap: 2.2vh;
+    background: var(--light);
+    color: var(--ink);
+    position: relative;
+  }
+  .slide.dark { background: var(--dark); color: var(--light); }
+  .slide.accent { background: var(--orange); color: var(--dark); }
+  .slide.dark .muted { color: var(--muted-dark); }
+  .muted { color: var(--muted); }
+
+  .eyebrow { font-size: clamp(14px, 1.3vw, 20px); font-weight: 500; letter-spacing: 2px; color: var(--orange); margin: 0; }
+  .accent .eyebrow { color: var(--dark); }
+  h1 { font-size: clamp(40px, 6vw, 96px); font-weight: 700; line-height: 1.1; margin: 0; }
+  h2 { font-size: clamp(28px, 3.6vw, 56px); font-weight: 700; line-height: 1.15; margin: 0; }
+  h3 { font-size: clamp(18px, 1.8vw, 28px); font-weight: 700; margin: 0; }
+  p, li { font-size: clamp(16px, 1.5vw, 24px); line-height: 1.55; margin: 0; }
+  ul { margin: 0; padding-left: 1.2em; display: flex; flex-direction: column; gap: 0.5em; }
+  .small { font-size: clamp(13px, 1.1vw, 18px); }
+  code { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 0.9em; }
+  .flowsvg { display: block; width: 100%; height: auto; max-height: 72vh; margin: 0 auto; }
+  @media print { .flowsvg { max-height: 150mm; } }
+
+  .log { display: flex; flex-direction: column; gap: 0.5vh; }
+  .log .line { display: flex; gap: 1vw; align-items: flex-start; font-size: clamp(12px, 1.05vw, 16px); line-height: 1.4; }
+  .log .t { width: 5.5vw; min-width: 58px; color: var(--muted); font-variant-numeric: tabular-nums; padding-top: 0.45em; font-size: 0.9em; }
+  .log .w { width: 5vw; min-width: 56px; font-weight: 700; padding-top: 0.45em; }
+  .log .b { flex: 1; padding: 0.45em 0.9em; border-radius: 12px; }
+  .log .me .b { background: var(--paper); border: 1px solid var(--line); }
+  .log .bot .b { background: var(--dark); color: var(--light); }
+  .log .tool .b { background: transparent; color: var(--muted); padding-left: 0; }
+  .log .pill { font-size: 0.8em; margin-left: 0.4em; }
+  .chip { display: inline-block; padding: 0.1em 0.6em; border-radius: 999px; background: var(--line); color: var(--muted); font-size: 0.8em; font-weight: 500; font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; white-space: nowrap; }
+  .log .bot .chip { background: #3a4651; color: var(--muted-dark); }
+  @media (max-width: 900px) { .log .t, .log .w { min-width: 44px; width: auto; } }
+  .lead { font-size: clamp(20px, 2.2vw, 34px); line-height: 1.4; }
+
+  .row { display: flex; gap: 2vw; }
+  .row > * { flex: 1; min-width: 0; }
+  .grid3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 1.6vw; }
+  .grid2 { display: grid; grid-template-columns: repeat(2, 1fr); gap: 1.6vw; }
+  .card { background: var(--paper); border: 1px solid var(--line); border-radius: 18px; padding: 2vh 1.6vw; display: flex; flex-direction: column; gap: 0.8vh; }
+  .card.dark { background: var(--dark); color: var(--light); border-color: var(--dark); }
+  .card.dark .muted { color: var(--muted-dark); }
+  .card .num { font-size: clamp(22px, 2.4vw, 36px); font-weight: 700; color: var(--orange); }
+
+  table { border-collapse: collapse; width: 100%; font-size: clamp(14px, 1.35vw, 22px); }
+  th, td { text-align: left; padding: 0.9vh 1vw; border-bottom: 1px solid var(--line); vertical-align: top; line-height: 1.45; }
+  th { background: var(--dark); color: var(--light); font-weight: 500; }
+  tr:nth-child(even) td { background: var(--paper); }
+  .accent table th { background: var(--dark); }
+  .slide.dark th { background: #3a4651; color: var(--light); }
+  .slide.dark td { border-bottom-color: #3a4651; }
+  .slide.dark tr:nth-child(even) td { background: #2a3640; }
+
+  .chat { display: flex; flex-direction: column; gap: 1.2vh; }
+  .msg { display: flex; gap: 1.2vw; align-items: flex-start; }
+  .msg .who { width: 6vw; min-width: 64px; font-weight: 700; font-size: clamp(14px, 1.2vw, 20px); padding-top: 0.6em; }
+  .msg .bubble { padding: 1.2vh 1.6vw; border-radius: 18px; font-size: clamp(16px, 1.6vw, 26px); line-height: 1.45; }
+  .msg.me .bubble { background: var(--light); color: var(--dark); }
+  .msg.bot .bubble { background: var(--dark); color: var(--light); }
+
+  .flow { display: flex; align-items: stretch; gap: 1vw; }
+  .flow .node { flex: 1; background: var(--paper); border: 1px solid var(--line); border-radius: 14px; padding: 1.6vh 1.2vw; display: flex; flex-direction: column; gap: 0.5vh; }
+  .flow .node.hl { background: var(--dark); color: var(--light); border-color: var(--dark); }
+  .flow .node.hl .muted { color: var(--muted-dark); }
+  .flow .arrow { display: flex; align-items: center; font-size: clamp(20px, 2.4vw, 36px); color: var(--orange); }
+
+  .layers { display: flex; flex-direction: column; gap: 1vh; }
+  .layer { display: flex; gap: 1.6vw; align-items: baseline; padding: 1.4vh 1.6vw; border-radius: 14px; background: var(--paper); border: 1px solid var(--line); }
+  .layer .tag { font-weight: 700; color: var(--orange); width: 11vw; min-width: 120px; font-size: clamp(16px, 1.5vw, 24px); }
+  .layer.new { border: 2px solid var(--orange); }
+
+  .footer { position: absolute; left: 8vw; right: 8vw; bottom: 2.4vh; display: flex; justify-content: space-between; font-size: 14px; color: var(--muted); }
+  .dark .footer, .accent .footer { color: inherit; opacity: 0.8; }
+  .spacer { flex: 1; }
+  .pill { display: inline-block; padding: 0.2em 0.8em; border-radius: 999px; background: var(--orange); color: var(--dark); font-weight: 700; font-size: 0.85em; }
+  .pill.blue { background: var(--blue); color: var(--light); }
+  .pill.gray { background: var(--line); color: var(--muted); }
+
+  .nav-hint { position: fixed; right: 16px; bottom: 12px; font-size: 13px; color: var(--muted-dark); opacity: 0.7; z-index: 9; }
+
+  @media (max-width: 900px) {
+    .row, .grid3, .grid2 { display: flex; flex-direction: column; }
+    .flow { flex-direction: column; }
+    .flow .arrow { transform: rotate(90deg); justify-content: center; }
+    .slide { padding: 5vh 16px; min-height: auto; }
+    body { scroll-snap-type: none; height: auto; }
+    .footer { position: static; margin-top: 2vh; }
+    .nav-hint { display: none; }
+  }
+  @media print {
+    body { background: #fff; height: auto; overflow: visible; scroll-snap-type: none; }
+    .slide { page-break-after: always; min-height: 0; height: 190mm; padding: 14mm 18mm; }
+    .nav-hint { display: none; }
+  }
+</style>
+</head>
+<body>
+
+<!-- 1. 표지 -->
+<section class="slide dark" id="s1">
+  <p class="eyebrow">아이디어 노트 · 스터디 발표</p>
+  <div class="spacer"></div>
+  <h1>리치미니<br>데스크메이트</h1>
+  <p class="lead muted">책상 위에서 같이 사는 반려봇.<br>북마크로 대화하고, 대화로 관계를 쌓는다.</p>
+  <div class="spacer"></div>
+  <div class="footer"><span>Reachy Mini × LLM API · 에뮬레이터 우선</span><span>2026.11.14</span></div>
+</section>
+
+<!-- 2. 방향 -->
+<section class="slide" id="s2">
+  <p class="eyebrow">방향</p>
+  <h2>비서봇이 아니라 반려봇</h2>
+  <div class="row">
+    <div class="card">
+      <h3 class="muted">비서봇의 평가 기준</h3>
+      <p class="muted">시킨 걸 잘 하느냐.<br>정확한가, 빠른가, 빠뜨린 게 없는가.</p>
+    </div>
+    <div class="card dark">
+      <h3 style="color:var(--orange)">반려봇의 평가 기준</h3>
+      <p>같이 있으면 재밌는가.<br>주말에도 노트북 앞에 앉고 싶어지는가.</p>
+    </div>
+  </div>
+  <ul class="muted">
+    <li>사용자를 평가하거나 재촉하지 않는다.</li>
+    <li>먼저 말 걸고, 같이 기뻐하고, 자기 취향과 자기 세계가 있다.</li>
+    <li>개발 순서는 에뮬레이터 검증 먼저, 실기기 포팅은 그다음.</li>
+  </ul>
+  <div class="footer"><span>이 기준이 모든 결정의 잣대</span><span>2 / 37</span></div>
+</section>
+
+<!-- 3. 기능 지도 -->
+<section class="slide" id="s3">
+  <p class="eyebrow">기능 지도</p>
+  <h2>기능 셋, 기반 둘</h2>
+  <table>
+    <tr><th style="width:22%">구분</th><th style="width:50%">내용</th><th style="width:28%">상태</th></tr>
+    <tr><td><b>기능 1</b> 위클리 인사이트</td><td>특정 기간에 추가된 북마크를 바탕으로 인사이트를 나누는 대화</td><td><span class="pill">구현 M0~M10 완료 · 팀 PR 리뷰 대기</span></td></tr>
+    <tr><td><b>기능 2</b> 장기 라포</td><td>리치미니와 나눈 대화를 쌓아 관계를 만든다</td><td><span class="pill gray">보류 · 라포 지표 기획 필요</span></td></tr>
+    <tr><td><b>기능 2+</b> 성격 진화</td><td>MBTI로 초기 성격 선택, 라포에 따라 디테일이 붙는다</td><td><span class="pill gray">보류 · 기능 2 이후</span></td></tr>
+    <tr><td><b>기반 A</b> 북마크 저장소</td><td>Chrome 북마크를 마크다운 파일로 미러링 (깃 타임라인은 나중, M9)</td><td><span class="pill blue">기능 1의 데이터</span></td></tr>
+    <tr><td><b>기반 B</b> 데스크메이트 패키지</td><td>북마크 동기화·요약·인사이트를 만드는 순수 파이썬 코드. 앱 안에서 함수로 호출</td><td><span class="pill blue">기능 1·2 공용</span></td></tr>
+  </table>
+  <p class="muted">기능 1만 먼저 만들고, 기능 2·2+는 데이터 형식만 확장 가능하게 둔다.</p>
+  <div class="footer"><span>초안의 "깃 트래킹"은 나중(M9)으로, "MCP 서버"(LLM에 도구를 붙이는 표준 통로)는 선택 사양으로 내렸다. 로봇은 MCP를 안 쓴다</span><span>3 / 37</span></div>
+</section>
+
+<!-- 4. 구조를 쉬운 말로 -->
+<section class="slide" id="s4">
+  <p class="eyebrow">전제 · 세 조각</p>
+  <h2>구조를 쉬운 말로</h2>
+  <div class="row">
+    <div class="card">
+      <h3>리치미니 <span class="muted">(몸)</span></h3>
+      <p class="muted small">책상 위 로봇. 안에는 모터·카메라·마이크를 움직이는 작은 프로그램(데몬, 늘 켜져 있는 바탕 프로그램)만 있다.</p>
+    </div>
+    <div class="card dark">
+      <h3 style="color:var(--orange)">대화 앱 <span class="muted">(뇌)</span></h3>
+      <p class="small">내 PC에서 도는 파이썬 프로그램. 마이크 소리를 LLM에 보내고, LLM이 "도구 써"라고 하면 실행하고, 로봇에게 "고개 돌려"를 보낸다.<br><b>우리가 만드는 건 이 앱.</b></p>
+    </div>
+    <div class="card">
+      <h3>데스크메이트 패키지 <span class="muted">(서랍장)</span></h3>
+      <p class="muted small">북마크를 읽고 요약하고 인사이트를 만드는 코드. 대화 앱 안에서 함수로 불린다. 나중에 로컬 LLM·온톨로지로 바꿀 때 이 안쪽만 바꾼다.</p>
+    </div>
+  </div>
+  <p class="muted">시뮬레이터에서는 로봇 자리에 MuJoCo가 들어간다. 실기기 없이 개발·시연 가능.</p>
+  <div class="footer"><span>Lite는 USB로, Wireless는 Wi-Fi로 PC와 연결</span><span>4 / 37</span></div>
+</section>
+
+<!-- 5. 기능 1 장면 -->
+<section class="slide accent" id="s5">
+  <p class="eyebrow">기능 1 · 위클리 인사이트</p>
+  <h2>토요일 아침, 이런 대화</h2>
+  <div class="chat">
+    <div class="msg me"><span class="who">나</span><span class="bubble">이번 주 북마크 얘기하자.</span></div>
+    <div class="msg bot"><span class="who">리치미니</span><span class="bubble">이번 주 북마크 네 개 중 셋이 WebRTC 재접속 얘기더라. 한 글은 ICE 재협상, 다른 글은 모바일 백그라운드 복귀 처리. 아바타 통화 쪽에서 끊김 겪고 있는 거야?</span></div>
+    <div class="msg me"><span class="who">나</span><span class="bubble">맞아, 모바일에서 백그라운드 갔다 오면 끊겨.</span></div>
+    <div class="msg bot"><span class="who">리치미니</span><span class="bubble">그럼 백그라운드 복귀 글이 바로 그 케이스야. 그 글만 조금 더 자세히 얘기해 줄까?</span></div>
+  </div>
+  <p>봇이 링크 본문을 읽고 요약해, 북마크 사이의 관계를 추론한 뒤 질문으로 대화를 연다. 왜 저장했는지는 묻지 않는다.</p>
+  <div class="footer"><span>대화 예시는 가상</span><span>5 / 37</span></div>
+</section>
+
+<!-- 6. 기능 1 결정 -->
+<section class="slide" id="s6">
+  <p class="eyebrow">기능 1 · 확정된 결정</p>
+  <h2>회의에서 정한 것</h2>
+  <div class="grid3">
+    <div class="card"><span class="num">01</span><h3>트리거는 사용자 요청만</h3><p class="muted small">"위클리 인사이트 해줘", "지난 3일 북마크 얘기하자". 봇이 먼저 제안하는 건 범위 밖.</p></div>
+    <div class="card"><span class="num">02</span><h3>기간 기본값은 지난 7일</h3><p class="muted small">사용자가 말하면 그 값. 위클리니까.</p></div>
+    <div class="card"><span class="num">03</span><h3>북마크는 Chrome 그대로</h3><p class="muted small">사용자는 Cmd+D만. 별도 저장 동작 없음. 1차는 Chrome 계열만.</p></div>
+    <div class="card"><span class="num">04</span><h3>추가 시각은 파일에 기록</h3><p class="muted small">Chrome이 저장한 시각(date_added)을 마크다운 머리글 date에 쓴다. 깃 타임라인은 나중(M9).</p></div>
+    <div class="card"><span class="num">05</span><h3>폴더는 .env로, 기본은 전체</h3><p class="muted small">세 루트(bookmark_bar, other, synced)를 모두 순회. private 폴더는 제외.</p></div>
+    <div class="card"><span class="num">06</span><h3>봇이 본문을 읽고 요약한다</h3><p class="muted small">URL 본문을 가져와 북마크별 요약 → 상관관계 추론 → 질문. "왜 저장했는지"는 묻지 않는다.</p></div>
+    <div class="card"><span class="num">07</span><h3>노트는 사람이 읽는 옵시디언 노트</h3><p class="muted small">봇 전용 내부 파일 없음. 기본 경로는 북마크 저장소/insights/. 같은 볼트여야 [[링크]]가 걸린다.</p></div>
+    <div class="card"><span class="num">08</span><h3>빈 기간 멘트</h3><p class="muted small">"지난 일주일 동안은 새로 저장한 게 없네. 요즘 관심 있는 건 뭐야?"</p></div>
+    <div class="card"><span class="num">09</span><h3>노트는 대화가 끝난 뒤 완성</h3><p class="muted small">배치가 요약·관계·질문을 쓰고, 종료 시 LLM 결론 + 대화 원문(접힘)을 덧붙인다.</p></div>
+  </div>
+  <div class="footer"><span>상세: oss_plan/2026-11-06-weekly-insight-design.md</span><span>6 / 37</span></div>
+</section>
+
+<!-- 7. 기능 1 흐름 -->
+<section class="slide" id="s7">
+  <p class="eyebrow">기능 1 · 데이터 흐름</p>
+  <h2>Chrome에서 로봇의 입까지</h2>
+  <div class="flow">
+    <div class="node"><h3>Chrome 북마크</h3><p class="muted small">사용자는 Cmd+D만. JSON 파일에 date_added가 남는다.</p></div>
+    <div class="arrow">→</div>
+    <div class="node"><h3>동기화</h3><p class="muted small">북마크 1개 = 마크다운 파일 1개. 추가 시각을 파일에 기록. private 제외.</p></div>
+    <div class="arrow">→</div>
+    <div class="node"><h3>요약기</h3><p class="muted small">링크 본문 → 북마크별 요약. 파일에 적어 두고 다시 쓴다.</p></div>
+  </div>
+  <div class="flow" style="justify-content:center"><div class="arrow" style="transform:none">↓</div></div>
+  <div class="flow">
+    <div class="node"><h3>인사이트 배치</h3><p class="muted small">요약 묶음 → 주제·관계·질문 → insights/*.md. 기간당 노트 1개.</p></div>
+    <div class="arrow">→</div>
+    <div class="node hl"><h3>도구 5개</h3><p class="muted small">get_insight · build_insight · get_bookmark · list_bookmarks · finish_insight. 앱 안에서 함수 호출.</p></div>
+    <div class="arrow">→</div>
+    <div class="node"><h3>앱 · 로봇</h3><p class="muted small">LLM이 도구로 노트를 읽고 말한다. 감정 모션은 play_emotion 도구.</p></div>
+  </div>
+  <div class="row">
+    <div class="card"><h3>왜 MCP를 안 쓰나</h3><p class="muted small">처음엔 별도 서버(MCP)로 두려 했는데, 지금 앱은 외부 서버 도구를 Hugging Face 주소만 받아서 로컬 서버가 안 붙는다. 같은 프로세스(앱이 돌고 있는 그 프로그램 안)에서 함수로 부르면 느리지도 않고, 켜고 끌 것도 없고, 에러 처리도 기존 도구와 똑같다.</p></div>
+    <div class="card"><h3>대화 중엔 무거운 일 안 한다</h3><p class="muted small">get_insight는 항상 바로 답한다. 노트가 없으면 "잠깐 훑어볼게" 하고 두 번째로 build_insight를 부른다. 이 도구가 뒤에서 끝까지 만든 뒤, 끝나면 봇이 스스로 돌아와 말한다. (뽀모도로 타이머와 같은 방식)</p></div>
+    <div class="card"><h3>본문을 못 가져오면</h3><p class="muted small">로그인·유료 벽·유튜브·PDF는 1차 범위 밖. fetch_failed로 기록하고 제목만으로 묶음에 넣는다. 봇은 "제목만 보고 하는 얘긴데"라고 밝힌다.</p></div>
+  </div>
+  <div class="footer"><span>MCP 서버는 나중에 옵시디언 등 다른 앱에서 쓰고 싶을 때 선택 사양</span><span>7 / 37</span></div>
+</section>
+
+<!-- 8. 기능 1 규칙 -->
+<section class="slide" id="s8">
+  <p class="eyebrow">기능 1 · 대화 규칙</p>
+  <h2>원칙 다섯, 종료 규칙 셋</h2>
+  <div class="row">
+    <div class="card dark">
+      <h3 style="color:var(--orange)">원칙 다섯</h3>
+      <ul class="small">
+        <li><b>노트 우선</b> — get_insight로 받은 노트만 근거로 말한다. 기억·추측으로 북마크 내용을 말하지 않는다.</li>
+        <li><b>한 묶음, 한 질문</b> — 발화 하나에 묶음 하나와 질문 하나. 반응을 듣고 다음 묶음으로.</li>
+        <li><b>평가 금지</b> — 읽었는지, 몇 개인지, 얼마나 묵혔는지 말하지 않는다.</li>
+        <li><b>근거 표시</b> — 어느 북마크끼리인지 짧게 줄인 제목으로 짚는다. 본문 없으면 "제목만 보고"라고 밝힌다.</li>
+        <li><b>말투는 프로필이 결정</b> — 정중함보다 다정함. 어조·존댓말은 활성 프로필을 따른다.</li>
+      </ul>
+    </div>
+    <div class="card">
+      <h3 class="muted">종료 규칙 셋</h3>
+      <ul class="muted small">
+        <li><b>명시 종료</b> — "정리", "종료"라고 하면 finish_insight.</li>
+        <li><b>주제 전환</b> — "위클리 인사이트 대화를 마칠까요?"를 한 번만 묻는다. 아니오면 당분간 다시 묻지 않는다.</li>
+        <li><b>자동 종료</b> — 무응답 10분·슬립이면 앱이 알아서 마무리하고 노트에 "자동 종료" 표시 (LLM이 아니라 앱 쪽 타이머가 한다).</li>
+      </ul>
+    </div>
+  </div>
+  <div class="card">
+    <h3>에뮬레이터 검증 시나리오</h3>
+    <ul class="muted small">
+      <li><b>1 정상</b> — "이번 주 북마크 얘기하자" → 묶음 하나 + 가설 + 질문 → "정리해 줘" → 노트에 대화 기록 절이 생긴다.</li>
+      <li><b>2 빈 기간</b> — 북마크 없는 기간을 지정 → 빈 기간 멘트.</li>
+      <li><b>3 주제 전환 종료</b> — 대화 중 "뽀모도로 시작해 줘" → 마칠지 1회 질문 → "응" → 종료 후 뽀모도로 시작.</li>
+      <li><b>4 본문 미확보</b> — URL 하나가 무응답 → fetch_failed 기록, 노트의 미확보 목록에 표시, 제목만으로 묶음에 포함.</li>
+      <li><b>5 자동 마무리</b> — 10분 무응답 → 앱이 알아서 마무리, 노트에 "자동 종료" 표시.</li>
+      <li><b>6 프로필 허용 목록</b> — 허용 목록에 없는 프로필은 동기화되지 않고, "회사 북마크로" 요청엔 쓸 수 있는 프로필 이름을 알려 준다.</li>
+    </ul>
+  </div>
+  <div class="footer"><span>금지: 읽었는지 묻기 · 개수로 평가 · 왜 저장했는지 묻기</span><span>8 / 37</span></div>
+</section>
+
+<!-- 9. 기능 1 KPI -->
+<section class="slide" id="s9">
+  <p class="eyebrow">기능 1 · KPI</p>
+  <h2>무엇을 재고, 어떻게 확인하나</h2>
+  <table>
+    <tr><th style="width:10%">구분</th><th style="width:20%">지표</th><th style="width:30%">목표 수준</th><th style="width:40%">측정 방식</th></tr>
+    <tr><td>기술</td><td>동기화 정확도</td><td>북마크 수·날짜 일치 100%</td><td>테스트 북마크 N개 → 마크다운 N개. 머리글 date가 date_added와 같은지 자동 테스트</td></tr>
+    <tr><td>기술</td><td>private 누출</td><td>0건</td><td>저장소·도구 응답·인사이트 노트 어디에도 없음을 테스트로 전수 확인</td></tr>
+    <tr><td>기술</td><td>가설 규칙 준수</td><td>인사이트 발화 중 질문으로 끝나는 비율 90% 이상</td><td>대화 전사 로그의 봇 발화 검사 (LLM 채점 또는 패턴)</td></tr>
+    <tr><td>경험</td><td>대화 지속</td><td>시작 후 3턴 이상 이어진 세션 비율. 첫 달 측정, 목표는 이후 설정</td><td>대화 전사 로그의 턴 수</td></tr>
+    <tr><td>경험</td><td>사용자 자기 평가</td><td>주 1회 "재밌었나" 5점 척도 평균 4 이상</td><td>인사이트 노트 끝의 한 줄 체크를 집계</td></tr>
+  </table>
+  <p class="muted">기술 3개는 테스트로 자동 검증, 경험 2개는 실사용 수 주간 측정. 목표 수치는 시작값.</p>
+  <div class="footer"><span>측정 전제: 대화 전사 로그 (M8)</span><span>9 / 37</span></div>
+</section>
+
+<!-- 10. 기능 1 비용과 백필 -->
+<section class="slide" id="s10">
+  <p class="eyebrow">기능 1 · 비용과 백필</p>
+  <h2>상한은 두지 않고, 쓴 만큼 기록한다</h2>
+  <div class="row">
+    <div class="card dark">
+      <h3 style="color:var(--orange)">비용</h3>
+      <ul class="small">
+        <li>상한 숫자 없음. 배치 1회당 토큰 사용량(입력·출력·캐시)을 로그에 남기고 첫 달 뒤 정한다.</li>
+        <li>본문은 북마크당 2만 자로 자른다. 요약은 한 번만 만들고 재사용.</li>
+        <li>배치는 Gemini Flash 계열 텍스트 모델. 음성용 실시간 모델과 분리.</li>
+        <li>Gemini 입력 한도는 약 100만 토큰. 2만 자여도 약 2%라 한도는 문제가 아니다.</li>
+      </ul>
+    </div>
+    <div class="card">
+      <h3>과거 기간 백필</h3>
+      <ul class="muted small">
+        <li>요약은 요청된 기간만. 첫 동기화로 들어온 과거 북마크는 요약하지 않는다.</li>
+        <li>과거 기간을 요청하면 무료 한도 안에서 쪼개 백그라운드 배치로 돌린다: 1회 20건 · 하루 100건 · 6초 간격 (모두 설정값).</li>
+        <li>북마크 단위로 즉시 파일에 쓰므로 중단돼도 pending만 이어서 처리.</li>
+        <li>진행 중 다시 물으면 부분 인사이트. "지금까지 요약된 N개 기준"이라고 밝힌다.</li>
+      </ul>
+    </div>
+  </div>
+  <div class="footer"><span>근거: 설계 문서 4.1</span><span>10 / 37</span></div>
+</section>
+
+<!-- 11. 검수에서 바뀐 것 -->
+<section class="slide" id="s11">
+  <p class="eyebrow">기능 1 · 검수 반영</p>
+  <h2>검수에서 바뀐 것</h2>
+  <table>
+    <tr><th style="width:44%">검수 지적</th><th style="width:56%">어떻게 바꿨나</th></tr>
+    <tr><td>로컬 MCP 서버는 앱에 안 붙는다</td><td>앱 안의 도구 4개 + 파이썬 패키지로. MCP는 선택 사양</td></tr>
+    <tr><td>대화 중 요약을 돌리면 30초 안에 못 끝난다</td><td>바로 답하고 뒤에서 만든 뒤 봇이 스스로 말한다</td></tr>
+    <tr><td>"10분 뒤 자동 종료"를 아무도 안 쏜다</td><td>앱 쪽 타이머가 발화마다 리셋, 침묵·슬립 때 앱이 마무리</td></tr>
+    <tr><td>북마크마다 깃 커밋은 느리고 복잡</td><td>v1은 깃 없이. 날짜는 파일에 있으니 나중에 그대로 재구성 (M9)</td></tr>
+    <tr><td>Chrome 내부 id는 기기마다 다르다</td><td>guid를 키로. 지우면 archived 표시, 제목 바뀌어도 파일명 유지</td></tr>
+    <tr><td>여러 PC·OS에서 한글 파일명이 어긋난다</td><td>파일명을 한 규칙(NFC 정규화, 금지 문자 제거)으로 만들고 테스트 집중</td></tr>
+    <tr><td>도구가 4개면 "뒤에서 만들고 돌아오기"를 못 한다</td><td>도구 5개: get_insight가 바로 답하고, build_insight가 끝까지 기다렸다가 봇이 스스로 말한다 (뽀모도로와 같은 방식)</td></tr>
+  </table>
+  <p class="muted">일곱 개 모두 "지금 코드가 실제로 어떻게 도는가"를 확인하고 나온 지적. 설계가 더 단순해졌다.</p>
+  <div class="footer"><span>검수: 20년차 풀스택 관점 서브에이전트</span><span>11 / 37</span></div>
+</section>
+
+<!-- 12. 구현 -->
+<section class="slide" id="s12">
+  <p class="eyebrow">기능 1 · 구현</p>
+  <h2>하룻밤 사이 만든 것</h2>
+  <div class="grid3">
+    <div class="card">
+      <span class="num">패키지</span>
+      <h3>src/deskmate/</h3>
+      <p class="muted small">동기화 · 요약 · 인사이트. 설정은 DESKMATE_* 환경변수로, 기존 config.py는 건드리지 않았다.</p>
+    </div>
+    <div class="card dark">
+      <span class="num">앱 쪽</span>
+      <h3 style="color:var(--orange)">도구 5개 + 프로필 + 데모 저장소</h3>
+      <p class="small">앱 도구 5개, 프로필 deskmate_ko(다정한 반말), 데모 저장소 만드는 스크립트. 내 맥 Chrome엔 북마크 파일이 없어서 시연은 가짜 데이터로.</p>
+    </div>
+    <div class="card">
+      <span class="num">검증</span>
+      <h3>테스트 646개 통과</h3>
+      <p class="muted small">ruff · mypy strict · pytest 전부 초록. 종단 테스트 1개: 가짜 Chrome → 요약 → 묶음 → 노트 → 도구까지 한 번에.</p>
+    </div>
+  </div>
+  <p class="muted">서브에이전트 셋(동기화 · 요약기+배치 · 도구)이 worktree에서 동시에 작업하고 메인이 합쳤다.</p>
+  <div class="footer"><span>브랜치 feat/weekly-insight · 아직 푸시 전</span><span>12 / 37</span></div>
+</section>
+
+<!-- 13. 기능 2 기억 층 -->
+<section class="slide" id="s13">
+  <p class="eyebrow">기능 2 · 장기 라포 (아이디어)</p>
+  <h2>라포는 사실의 양이 아니라 되돌아보기에서 생긴다</h2>
+  <p class="muted">지금 코드의 기억은 "사실 60개 JSON"을 통째로 프롬프트에 붙이는 수준. 라포를 위해 저장소를 층으로 나눈다.</p>
+  <div class="layers">
+    <div class="layer"><span class="tag">에피소드</span><p class="small"><b>원본 로그.</b> 대화 턴, 북마크 추가, 자리 비움·복귀를 타임스탬프와 함께. 외부 전송 안 함. 플랜 B에서 임베딩 대상.</p></div>
+    <div class="layer"><span class="tag">사실</span><p class="small"><b>지금의 memory.py.</b> "사용자는 WebRTC 프로젝트 중" 같은 정적 정보. 그대로 둔다.</p></div>
+    <div class="layer new"><span class="tag">관계</span><p class="small"><b>새로 필요. 라포의 실체.</b> 나중에 꺼낼 콜백 후보("지난주 그 버그"), 봇이 밝힌 자기 취향, 같이 웃은 농담, 만난 횟수와 마지막 만남. 세션 끝에 LLM이 "다음에 꺼낼 것 3줄"을 적는다.</p></div>
+    <div class="layer"><span class="tag">말투</span><p class="small"><b>persona.md.</b> 사용자 말버릇 추출. 기능 2+의 미니미 재료.</p></div>
+  </div>
+  <div class="footer"><span>읽기는 예산제: 세션마다 "최근 것 + 오늘 트리거와 관련된 것"만 프롬프트에 넣는다</span><span>13 / 37</span></div>
+</section>
+
+<!-- 14. 기능 2 열린 질문 -->
+<section class="slide dark" id="s14">
+  <p class="eyebrow">기능 2 · 열린 질문</p>
+  <h2>라포가 쌓였다는 걸 무엇으로 볼까</h2>
+  <p class="lead muted">이게 정해져야 기능 2+의 "성격이 변하는 조건"과 데이터 구조가 정해진다. 아직 기획 전.</p>
+  <div class="grid3">
+    <div class="card dark" style="border:1px solid #3a4651"><h3 style="color:var(--orange)">후보 지표</h3><ul class="muted small"><li>만난 횟수, 마지막 만남 간격</li><li>콜백 성공 횟수 (봇이 꺼낸 기억에 사용자가 반응)</li><li>사용자가 먼저 말 건 횟수</li></ul></div>
+    <div class="card dark" style="border:1px solid #3a4651"><h3 style="color:var(--orange)">결정할 것</h3><ul class="muted small"><li>관계 층에 뭘 적을지의 기준</li><li>봇이 적을지, 사용자가 확인 후 저장할지</li><li>승격·보관 규칙 (다시 언급되면 승격, 오래 안 쓰이면 보관)</li></ul></div>
+    <div class="card dark" style="border:1px solid #3a4651"><h3 style="color:var(--orange)">스터디에 묻고 싶은 것</h3><ul class="muted small"><li>"관계가 쌓였다"를 느낀 봇·앱 경험이 있는지</li><li>지표가 숫자여야 하는지, 서술이어도 되는지</li></ul></div>
+  </div>
+  <div class="footer"><span>기능 2는 보류. 기능 1의 대화 전사 로그가 에피소드 층의 원본이 되도록 형식만 미리 맞춘다</span><span>14 / 37</span></div>
+</section>
+
+<!-- 15. 기능 2+ -->
+<section class="slide" id="s15">
+  <p class="eyebrow">기능 2+ · 성격 진화 (아이디어)</p>
+  <h2>MBTI로 시작해서, 나를 닮아간다</h2>
+  <div class="grid3">
+    <div class="card"><span class="num">초기값</span><h3>MBTI 16개 중 선택</h3><p class="muted small">유형 1개 = 프로필 1개 (말투·관심사·반응 규칙). 기존 profiles/ 구조 그대로.</p></div>
+    <div class="card"><span class="num">변화</span><h3>전환이 아니라 흔들림</h3><p class="muted small">유형 자체는 안 바뀐다. 디테일이 붙는다. 평소엔 다른 짝처럼 굴다가 가끔 사용자 말버릇을 그대로 따라 해 뜨끔하게.</p></div>
+    <div class="card"><span class="num">조건</span><h3>라포 지표에 따라</h3><p class="muted small">기능 2에서 정한 지표가 단계를 올린다. 단계식인지 연속식인지는 미정.</p></div>
+  </div>
+  <div class="row">
+    <div class="card dark">
+      <h3 style="color:var(--orange)">디테일이 붙는 예</h3>
+      <ul class="small"><li>사용자가 자주 묻는 것에 먼저 답한다 (니즈 중심 응답)</li><li>사용자가 싫어한 반응은 줄인다</li><li>봇의 취향을 일관되게 유지한다 ("나는 그 폰트 별로야")</li><li>이전 대화를 먼저 꺼낸다 ("지난주에 짜증 냈던 버그 풀렸어?")</li></ul>
+    </div>
+    <div class="card">
+      <h3>플랜 A에서 되는 방식</h3>
+      <p class="muted small">누적된 메모(persona.md + 관계 층)를 시스템 프롬프트에 추가하는 것만으로 가능. 세션 종료 시 말버릇 추출 → 누적. 플랜 B에서는 로그 전체에서 패턴 추출로 교체.</p>
+    </div>
+  </div>
+  <div class="footer"><span>보류 중: 공부·코드로 키우는 다마고치. 기억과 북마크가 나중에 그 재료가 되도록 구조만 열어 둔다</span><span>15 / 37</span></div>
+</section>
+
+<!-- 16. 하드웨어 -->
+<section class="slide" id="s16">
+  <p class="eyebrow">전제 · 하드웨어</p>
+  <h2>로봇은 몸, 호스트는 뇌와 기억</h2>
+  <table>
+    <tr><th style="width:26%">모델</th><th style="width:40%">연산 · 저장</th><th style="width:34%">비고</th></tr>
+    <tr><td>Reachy Mini Lite</td><td>없음. USB로 PC에 연결</td><td>데이터는 전부 PC에</td></tr>
+    <tr><td>Reachy Mini Wireless</td><td>Raspberry Pi CM4, RAM 4GB, eMMC 16GB</td><td>microSD 슬롯 없음. USB-C에 USB 메모리 가능</td></tr>
+  </table>
+  <div class="row">
+    <div class="card"><h3>그래서</h3><p class="muted small">Wireless도 로컬 LLM이나 임베딩 검색은 못 돌린다. 공식 README도 "노트북에서 백엔드를 돌리고 Wireless가 Wi-Fi로 붙는" 구성을 안내. 데이터는 호스트(맥미니)에 둔다.</p></div>
+    <div class="card"><h3>플랜 B의 뇌 자리</h3><p class="muted small">맥미니 M4 24GB. 로컬 7~8B 모델로 대화·요약·분류·이벤트 반응, 클라우드는 긴 추론과 주간 인사이트.</p></div>
+    <div class="card"><h3>요구사항에 영향</h3><p class="muted small">Wireless면 "호스트가 꺼져 있을 때 봇이 어떻게 행동할지"도 정해야 한다.</p></div>
+  </div>
+  <div class="footer"><span>출처: Hugging Face Reachy Mini Hardware Datasheet</span><span>16 / 37</span></div>
+</section>
+
+<!-- 17. 플랜 A → B -->
+<section class="slide" id="s17">
+  <p class="eyebrow">플랜 A → 플랜 B</p>
+  <h2>교체 지점을 함수 하나로 좁힌다</h2>
+  <table>
+    <tr><th style="width:22%">영역</th><th style="width:36%">플랜 A (지금)</th><th style="width:42%">플랜 B (추후)</th></tr>
+    <tr><td>검색</td><td>데스크메이트 패키지의 날짜·키워드 조회 (함수 하나)</td><td>같은 함수 안쪽을 로컬 임베딩·온톨로지 질의로 교체. 앱은 모른다</td></tr>
+    <tr><td>기억</td><td>세션 요약 3줄 누적 (memory.md)</td><td>대화 로그 전체 로컬 저장 + 임베딩. 세부 맥락 회상</td></tr>
+    <tr><td>트리거</td><td>이벤트만 (북마크 추가, 타이머, 자리 감지, 웨이크워드)</td><td>always-on 청취 추가. 로컬 STT + 로컬 LLM이 끼어들 타이밍 판단</td></tr>
+    <tr><td>미니미</td><td>메모 기반 흉내 (persona.md)</td><td>로그 전체에서 패턴 추출</td></tr>
+    <tr><td>구조화 지식</td><td>옵시디언 링크</td><td>온톨로지. 그래프의 빈 곳 짚기, 관심사 이동 시각화</td></tr>
+  </table>
+  <p class="muted small">교체 지점은 셋: .env의 LLM 주소, 음성 백엔드 선택(HF 백엔드는 STT→LLM→TTS라 로컬 모델을 꽂을 수 있다), 패키지 검색 함수 안쪽.</p>
+  <div class="footer"><span>플랜 A의 한계: 북마크 수백 개 넘으면 전송 비용, 데이터 외부 전송, 상시 듣기 불가, 기억이 요약 수준</span><span>17 / 37</span></div>
+</section>
+
+<!-- 18. 구현 진행 상황 -->
+<section class="slide" id="s18">
+  <p class="eyebrow">기능 1 · 구현 진행 상황 (2026-11-13)</p>
+  <h2>M0~M10 완료, 시나리오 1~6 통과</h2>
+  <table>
+    <tr><th style="width:16%">마일스톤</th><th style="width:56%">내용</th><th style="width:28%">상태</th></tr>
+    <tr><td><b>M0</b></td><td>계약 · 픽스처</td><td><span class="pill">완료</span></td></tr>
+    <tr><td><b>M1</b></td><td>프로필 deskmate_ko + 데모 스크립트</td><td><span class="pill">완료</span></td></tr>
+    <tr><td><b>M2</b></td><td>Chrome 동기화</td><td><span class="pill">완료</span></td></tr>
+    <tr><td><b>M3 · M4</b></td><td>요약기 · 인사이트 배치</td><td><span class="pill">완료</span></td></tr>
+    <tr><td><b>M5</b></td><td>앱 도구 5개 (get_insight · build_insight · get_bookmark · list_bookmarks · finish_insight)</td><td><span class="pill">완료</span></td></tr>
+    <tr><td><b>M6</b></td><td>세션 상태 기계 · 앱 훅</td><td><span class="pill">완료 · 시나리오 1~6 통과</span></td></tr>
+    <tr><td><b>M7 · M8 · M9</b></td><td>백필 · 부분 인사이트 · 대화 로그 · 깃 미러 · MCP 서버(선택)</td><td><span class="pill">완료</span></td></tr>
+    <tr><td><b>M10</b></td><td>셋업 대시보드</td><td><span class="pill">완료 (포크 PR #3 머지)</span></td></tr>
+  </table>
+  <div class="footer"><span>pytest 784개 통과 · SDD 0.9.1 · 팀 PR #11</span><span>18 / 37</span></div>
+</section>
+
+<!-- 19. 기능 플로우 -->
+<section class="slide" id="s19">
+  <p class="eyebrow">기능 1 · 플로우</p>
+  <h2>대화 한 줄, 배치 한 줄, 상태 기계 하나</h2>
+  <svg class="flowsvg" viewBox="0 0 1200 600" role="img" aria-label="위클리 인사이트 기능 플로우: 대화 레인, 배치 레인, 앱 상태 기계">
+    <defs>
+      <marker id="ah-o" markerWidth="9" markerHeight="9" refX="8" refY="4.5" orient="auto" markerUnits="userSpaceOnUse"><path d="M0,0 L9,4.5 L0,9 z" fill="#E07A3F"/></marker>
+      <marker id="ah-g" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto" markerUnits="userSpaceOnUse"><path d="M0,0 L8,4 L0,8 z" fill="#9AA3AD"/></marker>
+    </defs>
+    <style>
+      .flowsvg text { font-family: 'Noto Sans KR', 'Apple SD Gothic Neo', 'Malgun Gothic', sans-serif; font-size: 15px; fill: #1F2A33; }
+      .flowsvg .lane-title { font-size: 17px; font-weight: 700; fill: #E07A3F; }
+      .flowsvg .lane-sub { font-size: 13px; fill: #4A5568; }
+      .flowsvg .mono { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 14px; fill: #3A86C8; font-weight: 700; }
+      .flowsvg .node { fill: #F7F4EE; stroke: #E3DED4; stroke-width: 1; }
+      .flowsvg .node.tool { stroke: #E07A3F; stroke-width: 1.5; }
+      .flowsvg .node.out { fill: #1F2A33; stroke: #1F2A33; }
+      .flowsvg .on-dark { fill: #F7F4EE; }
+      .flowsvg .on-dark .mono, .flowsvg .mono.on-dark { fill: #F7F4EE; }
+      .flowsvg .panel { fill: #FFFFFF; stroke: #E3DED4; stroke-width: 1; }
+      .flowsvg .step { stroke: #9AA3AD; stroke-width: 1.5; fill: none; marker-end: url(#ah-g); }
+      .flowsvg .cross { stroke: #E07A3F; stroke-width: 2.5; fill: none; marker-end: url(#ah-o); }
+      .flowsvg .cross-label { font-size: 13px; fill: #E07A3F; font-weight: 700; }
+    </style>
+
+    <!-- Lane A: 대화 -->
+    <rect class="panel" x="0" y="0" width="540" height="600" rx="18"/>
+    <text class="lane-title" x="20" y="32">대화 <tspan class="lane-sub">(실시간, LLM)</tspan></text>
+
+    <rect class="node" x="20" y="56" width="500" height="44" rx="12"/>
+    <text x="270" y="84" text-anchor="middle">사용자 — "이번 주 북마크 얘기하자"</text>
+    <path class="step" d="M270,100 V114"/>
+
+    <rect class="node tool" x="20" y="116" width="500" height="44" rx="12"/>
+    <text x="270" y="144" text-anchor="middle"><tspan class="mono">get_insight</tspan> — 즉시 반환: ready / generating / empty</text>
+    <path class="step" d="M270,160 V174"/>
+
+    <rect class="node" x="20" y="176" width="500" height="44" rx="12"/>
+    <text x="270" y="204" text-anchor="middle">[generating] 봇 — "잠깐 훑어볼게"</text>
+    <path class="step" d="M270,220 V234"/>
+
+    <rect class="node tool" x="20" y="236" width="500" height="44" rx="12"/>
+    <text x="270" y="264" text-anchor="middle"><tspan class="mono">build_insight</tspan> — BackgroundToolManager</text>
+    <path class="step" d="M270,280 V294"/>
+
+    <rect class="node" x="20" y="296" width="500" height="44" rx="12"/>
+    <text x="270" y="324" text-anchor="middle">결과 도착 — 봇이 스스로 돌아와 말한다</text>
+    <path class="step" d="M270,340 V354"/>
+
+    <rect class="node" x="20" y="356" width="500" height="44" rx="12"/>
+    <text x="270" y="384" text-anchor="middle">묶음 1개 + 질문 1개</text>
+    <path class="step" d="M270,400 V414"/>
+
+    <rect class="node tool" x="20" y="416" width="500" height="44" rx="12"/>
+    <text x="270" y="444" text-anchor="middle">후속 질문 — <tspan class="mono">get_bookmark</tspan> / <tspan class="mono">list_bookmarks</tspan></text>
+    <path class="step" d="M270,460 V474"/>
+
+    <rect class="node tool" x="20" y="476" width="500" height="44" rx="12"/>
+    <text x="270" y="504" text-anchor="middle"><tspan class="mono">finish_insight</tspan> (explicit | confirmed)</text>
+    <path class="step" d="M270,520 V534"/>
+
+    <rect class="node out" x="20" y="536" width="500" height="44" rx="12"/>
+    <text class="on-dark" x="270" y="564" text-anchor="middle">노트에 <tspan class="mono on-dark">## 대화 기록</tspan> 절 추가</text>
+
+    <!-- Lane B: 배치 -->
+    <rect class="panel" x="660" y="0" width="540" height="414" rx="18"/>
+    <text class="lane-title" x="680" y="32">배치 <tspan class="lane-sub">(백그라운드, 텍스트 모델)</tspan></text>
+
+    <rect class="node" x="680" y="56" width="500" height="44" rx="12"/>
+    <text x="930" y="84" text-anchor="middle">Chrome <tspan class="mono">Bookmarks</tspan> + <tspan class="mono">AccountBookmarks</tspan></text>
+    <path class="step" d="M930,100 V114"/>
+
+    <rect class="node" x="680" y="116" width="500" height="44" rx="12"/>
+    <text x="930" y="144" text-anchor="middle">동기화 → <tspan class="mono">bookmarks/&lt;profile&gt;/*.md</tspan></text>
+    <path class="step" d="M930,160 V174"/>
+
+    <rect class="node" x="680" y="176" width="500" height="44" rx="12"/>
+    <text x="930" y="204" text-anchor="middle">본문 수집 (trafilatura, 20,000자 상한)</text>
+    <path class="step" d="M930,220 V234"/>
+
+    <rect class="node" x="680" y="236" width="500" height="44" rx="12"/>
+    <text x="930" y="264" text-anchor="middle">요약 (Gemini Flash, 6초 간격)</text>
+    <path class="step" d="M930,280 V294"/>
+
+    <rect class="node" x="680" y="296" width="500" height="44" rx="12"/>
+    <text x="930" y="324" text-anchor="middle">묶음 · 상관관계 JSON</text>
+    <path class="step" d="M930,340 V354"/>
+
+    <rect class="node out" x="680" y="356" width="500" height="44" rx="12"/>
+    <text class="on-dark" x="930" y="384" text-anchor="middle"><tspan class="mono on-dark">insights/&lt;profile&gt;/&lt;since&gt;_&lt;until&gt;.md</tspan></text>
+
+    <!-- 앱 상태 기계 -->
+    <rect class="panel" x="660" y="440" width="540" height="160" rx="18"/>
+    <text class="lane-title" x="680" y="472" style="fill:#3A86C8">앱 상태 기계 <tspan class="lane-sub">(M6, LLM 없음)</tspan></text>
+    <rect class="node" x="680" y="488" width="238" height="44" rx="12"/>
+    <text x="799" y="516" text-anchor="middle">heartbeat ← 발화 · 도구 호출</text>
+    <rect class="node" x="942" y="488" width="238" height="44" rx="12"/>
+    <text x="1061" y="516" text-anchor="middle" style="font-size:14px">무응답 N분 · go_to_sleep · 앱 종료</text>
+    <path class="step" d="M799,532 V546"/>
+    <path class="step" d="M1061,532 V546"/>
+    <rect class="node out" x="680" y="548" width="500" height="40" rx="12"/>
+    <text class="on-dark" x="930" y="574" text-anchor="middle">노트에 <tspan class="mono on-dark">_자동 종료: 사유_</tspan> 절</text>
+
+    <!-- 교차 화살표 -->
+    <path class="cross" d="M520,258 H600 V138 H678"/>
+    <text class="cross-label" x="606" y="196">배치 실행</text>
+    <path class="cross" d="M680,378 H620 V318 H522"/>
+    <text class="cross-label" x="548" y="350" text-anchor="start" style="fill:#4A5568">노트 완성</text>
+    <path class="cross" d="M680,568 H522"/>
+    <text class="cross-label" x="600" y="586" text-anchor="middle" style="fill:#3A86C8">자동 종료</text>
+  </svg>
+  <div class="footer"><span>주황 테두리 = LLM 도구 · 검정 = 파일 산출물 · 주황 화살표 = 레인 사이 연결</span><span>19 / 37</span></div>
+</section>
+
+<!-- 20. 실제 대화 로그 -->
+<section class="slide" id="s20">
+  <p class="eyebrow">실제 대화 로그 (2026-11-07, 시뮬 + 실제 Chrome 북마크)</p>
+  <h2>시나리오 1을 실제로 돌려 봤다 — 기다림</h2>
+  <div class="log">
+    <div class="line bot"><span class="t">09:40</span><span class="w">리치미니</span><span class="b">왔네! 오늘은 뭐 할까?</span></div>
+    <div class="line me"><span class="t">09:40</span><span class="w">사용자</span><span class="b">오늘 기분은 어때?</span></div>
+    <div class="line bot"><span class="t">09:41</span><span class="w">리치미니</span><span class="b">너랑 얘기할 수 있어서 기분 최고야! 너는 어때?</span></div>
+    <div class="line me"><span class="t">09:41</span><span class="w">사용자</span><span class="b">나 새로운 기능 추가했잖아. 그 위클리 인사이트라는 기능인데 한번 살펴봐 줄래?</span></div>
+    <div class="line tool"><span class="t">09:41</span><span class="w"></span><span class="b"><span class="chip">도구 get_insight</span> status=generating (139 ms) <span class="chip">도구 build_insight 시작</span> since 2026-11-01 ~ until 2026-11-07</span></div>
+    <div class="line bot"><span class="t">09:41</span><span class="w">리치미니</span><span class="b">잠깐 훑어볼게.</span></div>
+    <div class="line me"><span class="t">09:41~47</span><span class="w">사용자</span><span class="b">(6회 말 걸음: "리치미니", "지금 뭐 하고 있어?" …) → <span class="chip">도구 task_status</span> 반복 조회, 발화 없음 <span class="pill">이슈 3 · 멈춘 것처럼 보임</span></span></div>
+    <div class="line bot"><span class="t">09:47</span><span class="w">리치미니</span><span class="b">아직 인사이트를 준비하는 중이야. 끝나는 대로 바로 알려줄게!</span></div>
+    <div class="line me"><span class="t">09:48</span><span class="w">사용자</span><span class="b">인사이트 준비하는데 오래 걸리는 이유도 말해 줄 수 있어?</span></div>
+  </div>
+  <div class="footer"><span>출처: 앱 로그 · 09:41부터 09:56까지 봇은 기다리는 중 · 필러 발화는 생략</span><span>20 / 37</span></div>
+</section>
+
+<!-- 21. 실제 대화 로그 2 -->
+<section class="slide" id="s21">
+  <p class="eyebrow">실제 대화 로그 (2026-11-07, 시뮬 + 실제 Chrome 북마크)</p>
+  <h2>시나리오 1을 실제로 돌려 봤다 — 인사이트 대화</h2>
+  <div class="log">
+    <div class="line tool"><span class="t">09:56</span><span class="w"></span><span class="b"><span class="chip">도구 build_insight 완료</span> status=ready (894 s) <span class="pill">이슈 2 · 14분 54초</span></span></div>
+    <div class="line bot"><span class="t">09:56</span><span class="w">리치미니</span><span class="b">북마크들을 꼼꼼하게 요약하고 연관성을 분석하느라 시간이 조금 걸렸어. 첫 번째로는 AMD 하드웨어 기반의 AI 개발 환경에 대한 내용인데, 진행 중인 프로젝트에서 클라우드와 로컬 환경 중 어디를 우선으로 테스트하고 싶어?</span></div>
+    <div class="line me"><span class="t">09:57</span><span class="w">사용자</span><span class="b">분석해 줘서 고마워. 그런데 다시 한번 말해 줄래? 너무 말이 길어서 무슨 말인지 잘 이해를 못 했어.</span></div>
+    <div class="line bot"><span class="t">09:57</span><span class="w">리치미니</span><span class="b">AMD 하드웨어로 AI 개발 환경을 쉽게 구축하는 방법에 대한 내용이야. 구상 중인 프로젝트에서 AMD 클라우드와 로컬 도커 중 어디를 먼저 테스트해보고 싶어?</span></div>
+    <div class="line me"><span class="t">09:57</span><span class="w">사용자</span><span class="b">이거를 지금 바로 테스트하려고 했던 건 아니고 내가 이번 주에 AMD 컨퍼런스에 갔다 왔어. 그래서 하드웨어적으로 어떻게 로컬에서 AI를 LLM을 돌릴 수 있는지 좀 조사해 보고 있었던 거 같아. <span class="chip">도구 remember</span></span></div>
+    <div class="line bot"><span class="t">09:57</span><span class="w">리치미니</span><span class="b">컨퍼런스에 다녀왔구나! 로컬에서 LLM을 돌리는 데 관심이 많다면, 기기 자체에서 멀티모달 AI를 구동하는 Lemonade 같은 오픈소스 플랫폼도 한번 살펴보면 좋겠어. 혹시 이 플랫폼으로 어떤 작업을 가장 먼저 로컬 환경으로 전환해보고 싶어?</span></div>
+    <div class="line me"><span class="t">09:57</span><span class="w">사용자</span><span class="b">나만을 위한 지식 온톨로지를 구축하고 싶어. 우리 집에. <span class="chip">도구 remember</span></span></div>
+    <div class="line bot"><span class="t">09:58</span><span class="w">리치미니</span><span class="b">집에 나만의 지식 온톨로지를 구축하는 건 정말 멋진 계획이야! 로컬 환경에서 개인화된 인공지능을 활용하는 데 큰 도움이 될 거야.</span></div>
+    <div class="line me"><span class="t">09:58</span><span class="w">사용자</span><span class="b">고마워. 오늘은 일단 여기까지만 인사이트 기록해 줄래?</span></div>
+    <div class="line tool"><span class="t">09:58</span><span class="w"></span><span class="b"><span class="chip">도구 finish_insight</span> reason=explicit → 노트에 기록 (1 ms)</span></div>
+    <div class="line bot"><span class="t">09:58</span><span class="w">리치미니</span><span class="b">알았어. 오늘의 인사이트 기록을 여기서 마칠게. 더 필요한 게 있으면 언제든 말해 줘!</span></div>
+  </div>
+  <div class="footer"><span>출처: 앱 로그 · 실제 북마크 파이프라인 14분 54초 · 필러 발화는 생략</span><span>21 / 37</span></div>
+</section>
+
+<!-- 22. 생성된 노트 -->
+<section class="slide" id="s22">
+  <p class="eyebrow">실제 대화 로그 · 생성된 노트</p>
+  <h2>대화가 끝나자 노트가 완성됐다</h2>
+  <div class="row">
+    <div class="card dark">
+      <h3 style="color:var(--orange)"><code>04_bookmarks/insights/Default/2026-11-01_2026-11-07.md</code></h3>
+      <ul class="small">
+        <li><b>묶음 1 — AMD 하드웨어 기반 AI 개발 및 가속 환경</b> (북마크 2건: AMD GPU Workshops, AMDResearch Ryzers)<br><span class="muted">관계: 두 자료 모두 AMD 연산 자원(ROCm GPU · Ryzen AI NPU)으로 개발 환경 구축 부담을 줄이는 실무 도구</span></li>
+        <li><b>묶음 2 — 로컬 및 온디바이스 멀티모달 AI 서빙</b> (Lemonade 1건)</li>
+        <li><b><code>## 대화 기록 (2026-11-07 09:58)</code></b><br><span class="muted">"AMD 하드웨어 기반 AI 개발 환경에 대해 논의했으며, 로컬 LLM 서빙 플랫폼과 지식 온톨로지 구축에 대한 관심을 확인했습니다."</span></li>
+      </ul>
+    </div>
+    <div class="card">
+      <h3>관찰</h3>
+      <ul class="muted small">
+        <li><span class="pill">시나리오 1 통과</span> generating → ready → 묶음+질문 → explicit 종료 → 노트 기록</li>
+        <li>첫 발화가 길어 사용자가 되물었다 → 프롬프트에서 첫 발화 길이 제한 필요.</li>
+        <li>기다리는 9분 동안 봇이 침묵 (이슈 3), 배치 14분 54초 (이슈 2) → 다음 슬라이드들.</li>
+      </ul>
+    </div>
+  </div>
+  <div class="footer"><span>노트 전문은 저장소의 insights/ 폴더</span><span>22 / 37</span></div>
+</section>
+
+<!-- 23. M6 자동 종료 -->
+<section class="slide" id="s23">
+  <p class="eyebrow">M6 · 세션 상태 기계</p>
+  <h2>자동 종료는 앱이 한다</h2>
+  <div class="row">
+    <div class="card dark">
+      <h3 style="color:var(--orange)">LLM이 하는 것</h3>
+      <p class="small">finish_insight 호출뿐. 사용자가 "정리"라고 하거나(explicit), 주제 전환을 확인했을 때(confirmed).</p>
+    </div>
+    <div class="card">
+      <h3>앱이 닫는 세 경우</h3>
+      <ul class="muted small">
+        <li><b>무응답 N분</b> — DESKMATE_INSIGHT_IDLE_TIMEOUT_MIN, 기본 10분. 2초 폴링 감시 스레드.</li>
+        <li><b>go_to_sleep 진입</b></li>
+        <li><b>앱 종료</b></li>
+      </ul>
+      <p class="muted small">세 경우 모두 노트에 <code>_자동 종료: 사유_</code> 절을 남긴다.</p>
+    </div>
+  </div>
+  <div class="row">
+    <div class="card"><h3>heartbeat</h3><p class="muted small">발화 · 전사 · 도구 호출마다 타이머 리셋. LocalStream activity observer에서 팬아웃.</p></div>
+    <div class="card"><h3>왜 앱 쪽인가</h3><p class="muted small">슬립에 들어가면 도구 결과가 폐기되고, Gemini 재연결 시 맥락이 사라진다. LLM에게 "10분 뒤 정리해"를 맡길 수 없다.</p></div>
+  </div>
+  <div class="footer"><span>검수 반영 3번째 항목의 구현</span><span>23 / 37</span></div>
+</section>
+
+<!-- 24. 실기기 점검 1 -->
+<section class="slide" id="s24">
+  <p class="eyebrow">실기기 점검에서 발견한 것 1</p>
+  <h2>Chrome 계정 북마크</h2>
+  <div class="row">
+    <div class="card dark">
+      <h3 style="color:var(--orange)">문제</h3>
+      <p class="small">로그인한 Chrome은 북마크를 <code>Bookmarks</code>가 아니라 <code>AccountBookmarks</code>에 저장한다.<br>사용자 PC: Bookmarks 없음, AccountBookmarks 364개.</p>
+    </div>
+    <div class="card">
+      <h3>수정</h3>
+      <ul class="muted small">
+        <li>동기화가 두 파일을 모두 읽어 같은 프로필 안에서 합친다.</li>
+        <li>첫 동기화 결과: 360개 md 파일, 0.1초.</li>
+      </ul>
+    </div>
+  </div>
+  <div class="card">
+    <h3>세팅 확인 명령 추가</h3>
+    <p class="muted small"><code>python -m deskmate.sync --discover</code> — 경로 · 프로필 · 파일 · 개수 · .env 줄을 출력한다.</p>
+  </div>
+  <div class="footer"><span>슬라이드 12의 "내 맥 Chrome엔 북마크 파일이 없다"는 이 파일을 못 찾은 것이었다</span><span>24 / 37</span></div>
+</section>
+
+<!-- 25. 이슈 2 -->
+<section class="slide dark" id="s25">
+  <p class="eyebrow">발견한 이슈 2</p>
+  <h2>요약 호출이 너무 느리다</h2>
+  <div class="row">
+    <div class="card dark" style="border:1px solid #3a4651">
+      <h3 style="color:var(--orange)">실측</h3>
+      <ul class="small">
+        <li>북마크 1건 요약 — Gemini(gemini-3.8-flash generateContent) 호출 <b>2분 34초</b>, 두 번째 <b>4분 28초</b></li>
+        <li>북마크 3건 + 묶음 호출이면 <b>10분 이상</b> → 대화 중 사용 불가</li>
+      </ul>
+    </div>
+    <div class="card dark" style="border:1px solid #3a4651">
+      <h3 style="color:var(--orange)">원인 후보</h3>
+      <ul class="muted small">
+        <li>thinking 예산 무제한</li>
+        <li>20,000자 본문</li>
+        <li>타임아웃 없음</li>
+        <li>직렬 호출 (6초 간격)</li>
+      </ul>
+    </div>
+    <div class="card dark" style="border:1px solid #3a4651">
+      <h3 style="color:var(--orange)">대응 후보</h3>
+      <ul class="muted small">
+        <li>thinking_budget 0 또는 소량</li>
+        <li>max_output_tokens</li>
+        <li>본문 상한 축소 (예: 6,000자)</li>
+        <li>요청 타임아웃 + 재시도</li>
+        <li>병렬 요약</li>
+        <li>더 가벼운 모델</li>
+      </ul>
+    </div>
+  </div>
+  <p class="lead muted">측정 후 결정.</p>
+  <div class="footer"><span>슬라이드 10의 "2만 자여도 한도는 문제가 아니다"는 토큰 한도 얘기였고, 시간은 별개였다</span><span>25 / 37</span></div>
+</section>
+
+<!-- 26. 이슈 3 -->
+<section class="slide" id="s26">
+  <p class="eyebrow">발견한 이슈 3</p>
+  <h2>백그라운드 작업 중 로봇이 멈춘 것처럼 보인다</h2>
+  <div class="card dark">
+    <h3 style="color:var(--orange)">사용자 관찰</h3>
+    <p class="small">동기화 · 요약이 도는 동안 리치미니가 아무 반응이 없어 멈춘 줄 알았다. 사용자는 6번 말을 걸었고 봇은 task_status만 조회했다.</p>
+  </div>
+  <div class="grid2">
+    <div class="card"><span class="num">a</span><h3>작업 중 '생각 중' 표현</h3><p class="muted small">모션 루프(안테나 흔들기 · 고개 갸웃) 또는 짧은 신호음 주기 재생.</p></div>
+    <div class="card"><span class="num">b</span><h3>진행 단계 노출</h3><p class="muted small">build_insight 결과 전에 task_status에 단계를 보인다: 동기화 → 본문 수집 n/m → 요약 n/m → 묶음.</p></div>
+    <div class="card"><span class="num">c</span><h3>프롬프트</h3><p class="muted small">작업 중 질문이 오면 "아직 훑는 중, n건 중 k건" 식으로 답한다.</p></div>
+    <div class="card"><span class="num">d</span><h3>완료 알림</h3><p class="muted small">끝나면 감정 모션으로 알린다 (이미 설계).</p></div>
+  </div>
+  <p class="muted">요구사항으로 정리한 뒤 구현.</p>
+  <div class="footer"><span>반려봇 기준: 기다리게 하더라도 "같이 있다"는 느낌은 끊기면 안 된다</span><span>26 / 37</span></div>
+</section>
+
+<!-- 27. 사용성 개선 메모 -->
+<section class="slide" id="s27">
+  <p class="eyebrow">사용성 개선 메모</p>
+  <h2>써 보니 걸리는 것</h2>
+  <div class="row">
+    <div class="card">
+      <h3>첫 세팅</h3>
+      <ul class="muted small">
+        <li>사용자가 정할 것은 두 가지뿐 — 읽을 프로필, 저장소 폴더. 경로는 자동 탐색.</li>
+        <li>.env 수동 편집은 아직 필요 → M10에서 제거.</li>
+        <li>실제 북마크 vs 데모 픽스처는 저장소 폴더와 Chrome 경로를 한 쌍으로 바꿔야 한다.</li>
+        <li><b>새 아이디어</b> — 첫 연동은 오래 걸리므로, 가장 최근 북마크 1건만 먼저 요약해 바로 대화를 시작하고, 그 주의 나머지는 백그라운드에서 이어서 요약한다 (부분 인사이트 → M7 partial 상태와 연결).</li>
+      </ul>
+    </div>
+    <div class="card">
+      <h3>데모 · 테스트</h3>
+      <ul class="muted small">
+        <li>데모 시 무응답 타임아웃을 1분으로.</li>
+        <li>테스트 중 카메라가 켜지는 비전 테스트 1건 발견 (get_frame_bgr 미모킹) → 담당자 전달.</li>
+      </ul>
+    </div>
+  </div>
+  <div class="footer"><span>세팅 2개 외엔 전부 자동이어야 한다</span><span>27 / 37</span></div>
+</section>
+
+<!-- 28. M10 셋업 대시보드 -->
+<section class="slide" id="s28">
+  <p class="eyebrow">다음 아이디어 · M10</p>
+  <h2>셋업 대시보드</h2>
+  <p class="muted">설정 웹 UI(7860)에 DeskMate 패널을 넣는다. .env를 손으로 안 고친다.</p>
+  <div class="row">
+    <div class="card dark">
+      <h3 style="color:var(--orange)">버튼</h3>
+      <ul class="small">
+        <li>프로필 탐색</li>
+        <li>동기화 실행 (결과 표)</li>
+        <li>저장소 폴더 지정 · 생성 — 없으면 만들고 .env 반영. Chrome 폴더 · 시스템 폴더는 거부</li>
+        <li>.env 적용</li>
+        <li>데모 데이터 준비</li>
+      </ul>
+    </div>
+    <div class="card">
+      <h3>구현 방식</h3>
+      <ul class="muted small">
+        <li>셸 실행 없이 패키지 함수 직접 호출</li>
+        <li>JSON-RPC <code>deskmate.*</code> 메서드: status · discover · sync · repo.set · env.apply · demo_setup</li>
+        <li>Windows 동작</li>
+      </ul>
+    </div>
+    <div class="card">
+      <h3>신뢰 경계 · 순서</h3>
+      <ul class="muted small">
+        <li>기존 설정 UI와 동일 (LAN 노출, API 키 편집과 같은 수준)</li>
+        <li>M6 검증 후 착수</li>
+      </ul>
+    </div>
+  </div>
+  <div class="footer"><span>계획 문서: oss_plan/2026-11-07-deskmate-setup-dashboard-plan.md</span><span>28 / 37</span></div>
+</section>
+
+<!-- 29. 오후 검증 결과 -->
+<section class="slide" id="s29">
+  <p class="eyebrow">오후 검증 결과 (2026-11-07)</p>
+  <h2>시나리오 여섯, 전부 실측</h2>
+  <table>
+    <tr><th style="width:26%">시나리오</th><th style="width:74%">결과</th></tr>
+    <tr><td><b>1</b> 정상</td><td><span class="pill">통과</span></td></tr>
+    <tr><td><b>2</b> 빈 기간</td><td><span class="pill">통과</span></td></tr>
+    <tr><td><b>3</b> 주제 전환</td><td>프롬프트 보강 전 <b>1/4</b> → 보강 후 <b>2/2</b> <span class="muted">("마칠까?" → confirmed 종료 + 뽀모도로 시작)</span></td></tr>
+    <tr><td><b>4</b> 본문 미확보</td><td><span class="pill">통과</span> <span class="muted">노트에 "본문 미확보" 절, 기존 대화 기록 보존</span></td></tr>
+    <tr><td><b>5</b> 자동 종료</td><td><span class="pill">통과</span> <span class="muted">무응답 1분 · 앱 종료 · 슬립 전환 모두 실측</span></td></tr>
+    <tr><td><b>6</b> 프로필 허용 목록</td><td><span class="pill">통과</span></td></tr>
+  </table>
+  <div class="row">
+    <div class="card"><span class="num">17.6초</span><p class="muted small">월간(30일) 노트 생성</p></div>
+    <div class="card"><span class="num">0.35초</span><p class="muted small">get_insight (동기화 포함)</p></div>
+    <div class="card"><span class="num">1초</span><p class="muted small">효과음 틱 간격 (사용자 확정)</p></div>
+  </div>
+  <div class="footer"><span>오전 14분 54초 → 오후 17.6초: 느린 원인은 모델이 아니라 SDK 재시도였다 (다음 슬라이드)</span><span>29 / 37</span></div>
+</section>
+
+<!-- 30. 오후에 고친 것 -->
+<section class="slide" id="s30">
+  <p class="eyebrow">오후에 고친 것 · 커밋 4개</p>
+  <h2>침묵과 느림, 둘 다 원인이 따로 있었다</h2>
+  <div class="grid2">
+    <div class="card dark">
+      <span class="num"><code>cb6604c</code></span>
+      <h3 style="color:var(--orange)">Gemini 도구 응답 묶음 버그</h3>
+      <p class="small">앱 전체가 하나의 묶음이라 긴 도구(build_insight · 뽀모도로)가 도는 동안 task_status 응답이 전달되지 않아 봇이 침묵했다 → 서버 메시지 단위로 분리. <span class="muted">(이슈 3의 진짜 원인)</span></p>
+    </div>
+    <div class="card dark">
+      <span class="num"><code>8150ee9</code></span>
+      <h3 style="color:var(--orange)">배치 모델, 빨리 실패하기</h3>
+      <p class="small">느린 진짜 원인은 SDK 기본 재시도(5회, 1→60초)가 503을 숨긴 것 → 30초 타임아웃 · 2회 재시도 · thinking 0. 요약 1건 실패는 건너뛰고 계속, 묶음 실패 시 직전 노트를 degraded ready로. <span class="muted">(이슈 2)</span></p>
+    </div>
+    <div class="card">
+      <span class="num"><code>6e65159</code></span>
+      <h3>훑어보는 중 신호 + 안전망 + 프롬프트</h3>
+      <ul class="muted small">
+        <li>효과음(시작 · 틱 · 완료) + 안테나 모션</li>
+        <li>get_insight 전 Chrome 동기화 — 새 북마크 즉시 반영</li>
+        <li>조기 종료 뒤에도 결론이 기록되는 세션 안전망</li>
+        <li>프롬프트: 먼저 "잠깐 훑어볼게", 명시 마무리에만 finish, 짧은 첫 발화, 한국어</li>
+      </ul>
+    </div>
+    <div class="card">
+      <span class="num"><code>1cffc0d</code></span>
+      <h3>틱 1초</h3>
+      <p class="muted small">효과음 틱 간격을 1초로. 사용자가 들어 보고 확정.</p>
+    </div>
+  </div>
+  <div class="footer"><span>브랜치 feat/weekly-insight</span><span>30 / 37</span></div>
+</section>
+
+<!-- 31. 미해결 -->
+<section class="slide dark" id="s31">
+  <p class="eyebrow">오늘 발견했지만 다른 영역이거나 미해결</p>
+  <h2>미해결 <span class="pill" style="font-size:0.45em; vertical-align:middle">열려 있음 · 이 브랜치에서 안 고침</span></h2>
+  <table>
+    <tr><th style="width:72%">발견</th><th style="width:28%">담당 / 상태</th></tr>
+    <tr><td>슬립 5초 뒤 웨이크 워드 엔진이 점수 1.000으로 자동 기상 (사용자가 부르지 않음)</td><td>웨이크 워드 모듈 오탐 가능성 · 담당 전달</td></tr>
+    <tr><td>회의 중 앱이 Google Meet 소리를 듣고 대답</td><td>마이크 게이팅 또는 "회의 모드" 필요 · 미해결</td></tr>
+    <tr><td>Live 모델의 thinking 텍스트가 assistant 전사로 로그에 섞임 (role=assistant content=thought …)</td><td>Gemini 백엔드 · 미해결</td></tr>
+    <tr><td>비전 테스트 1건(test_detect_face_tool_success)이 실제 웹캠을 연다</td><td>get_frame_bgr 모킹 한 줄 · 담당 전달</td></tr>
+    <tr><td>배치 요약 본문을 캐시하지 않아 모델 호출 실패 시 다음 실행에서 재수집</td><td>데스크메이트 · 미해결</td></tr>
+    <tr><td>대시보드: 같은 프로세스에서 배치가 저장소 잠금을 쥐면 동기화 버튼이 "진행 중" 오류 대신 대기해야</td><td>M10 · 미해결</td></tr>
+    <tr><td>시나리오 3 표본이 적다 (누계 2/6)</td><td>추가 측정</td></tr>
+    <tr><td>대화 원문이 노트에 남지 않음 (결론만)</td><td>M8 대화 로그 PR</td></tr>
+  </table>
+  <div class="footer"><span>위 넷은 다른 담당 영역, 아래 넷은 이 기능의 후속</span><span>31 / 37</span></div>
+</section>
+
+<!-- 32. M10 대시보드 1차 초안 -->
+<section class="slide" id="s32">
+  <p class="eyebrow">M10 대시보드 1차 초안 · 브랜치 feat/deskmate-dashboard</p>
+  <h2>설정 UI에 DeskMate 패널이 생겼다</h2>
+  <div class="row">
+    <div class="card dark">
+      <h3 style="color:var(--orange)">패널 구성</h3>
+      <ul class="small">
+        <li>상태 카드</li>
+        <li>버튼 5개 — 프로필 탐색 · 동기화 · 저장소 폴더 만들기·적용 · .env 적용 · 데모 데이터</li>
+        <li>JSON-RPC <code>deskmate.*</code> 메서드 6개</li>
+      </ul>
+    </div>
+    <div class="card">
+      <h3>검증 · 문서</h3>
+      <ul class="muted small">
+        <li>라우트 테스트 29개</li>
+        <li><code>docs/deskmate-setup.md</code></li>
+      </ul>
+    </div>
+    <div class="card">
+      <h3>상태</h3>
+      <ul class="muted small">
+        <li>포크에 푸시, PR 없음</li>
+        <li>브라우저 확인 대기 — <code>reachy-mini-conversation-app --ui</code> → <code>http://127.0.0.1:7860/#/settings</code></li>
+      </ul>
+    </div>
+  </div>
+  <div class="footer"><span>계획 문서: oss_plan/2026-11-07-deskmate-setup-dashboard-plan.md</span><span>32 / 37</span></div>
+</section>
+
+<!-- 33. 저녁에 끝낸 것 M7 · M8 · M9 -->
+<section class="slide" id="s33">
+  <p class="eyebrow">저녁에 끝낸 것 · M7 · M8 · M9</p>
+  <h2>백필, 대화 로그, 깃 미러까지</h2>
+  <div class="row">
+    <div class="card dark">
+      <span class="num">M7</span>
+      <h3 style="color:var(--orange)">백필 · 부분 인사이트</h3>
+      <ul class="small">
+        <li>한 번에 20건 · 하루 100건까지 요약. 넘치면 partial 노트(<code>complete: false</code>, <code>## 미요약</code> 절) → "이어서 정리해 줘"로 계속.</li>
+        <li>같은 기간을 만들고 있으면 backfilling — "아직 훑는 중".</li>
+        <li>설정 <code>DESKMATE_DAILY_MAX_SUMMARIES</code> · <code>DESKMATE_CALL_INTERVAL_S</code></li>
+      </ul>
+    </div>
+    <div class="card">
+      <span class="num">M8</span>
+      <h3>대화 로그</h3>
+      <ul class="muted small">
+        <li>세션마다 <code>.deskmate/conversations/날짜_시각.jsonl</code>에 최종 전사만 기록. 슬립 · 종료 때 닫고, 다음 발화가 새 파일.</li>
+        <li><code>finish_insight</code>가 결론 아래에 접힌 "대화 원문"(최대 200줄)을 첨부.</li>
+        <li>오전에 아쉬웠던 "컨퍼런스 다녀온 얘기"가 이제 노트에 남는다.</li>
+      </ul>
+    </div>
+    <div class="card">
+      <span class="num">M9</span>
+      <h3>깃 미러 · MCP 서버 <span class="muted">(선택)</span></h3>
+      <ul class="muted small">
+        <li><code>python -m deskmate.sync --git-rebuild</code> — 북마크 날짜 기준으로 과거 커밋 재구성. <code>DESKMATE_GIT_MIRROR=1</code>이면 동기화 때 자동 커밋 (기본 꺼짐).</li>
+        <li>도구 로직을 <code>deskmate.api</code>로 분리 → <code>python -m deskmate.mcp_server</code>(stdio / <code>--http</code> → :8765/mcp)가 같은 도구 5개를 노출. 앱 도구는 얇은 래퍼.</li>
+      </ul>
+    </div>
+  </div>
+  <div class="footer"><span>슬라이드 10의 백필 설정값(20건 · 100건 · 6초)이 그대로 구현됐다 · 슬라이드 31의 "대화 원문" 항목 닫힘</span><span>33 / 37</span></div>
+</section>
+
+<!-- 34. M10 대시보드 마무리와 리뷰 -->
+<section class="slide" id="s34">
+  <p class="eyebrow">M10 · 대시보드 마무리와 리뷰</p>
+  <h2>리뷰어가 찾은 것부터 고치고 머지했다</h2>
+  <p class="muted">순서: M7~M9 위로 리베이스 → 선입견 없는 리뷰어 에이전트(코드만 보고 판단) → 필수 2 · 보완 3 수정 → 브라우저 확인 → 포크 PR #3 머지</p>
+  <div class="row">
+    <div class="card dark">
+      <h3 style="color:var(--orange)">필수 수정 2건</h3>
+      <ul class="small">
+        <li>음성 쪽 배치가 저장소 잠금을 쥐면 동기화 버튼이 180초 멈추고 엉뚱한 안내 → 프로세스 내 잠금 2초 타임아웃, "다른 작업이 쓰고 있습니다".</li>
+        <li>동기화 RPC가 검증 없이 받던 경로 인자 제거.</li>
+      </ul>
+    </div>
+    <div class="card">
+      <h3>보완 3건 · 규칙 준수</h3>
+      <ul class="muted small">
+        <li>macOS 대소문자 우회 · 파일 경로 거부 · 타임아웃 뒤 상태 갱신</li>
+        <li><code>docs/</code> 마크다운 금지 규칙 → 설정 가이드를 README 절로 이동</li>
+      </ul>
+    </div>
+    <div class="card">
+      <h3>확인 · 머지</h3>
+      <ul class="muted small">
+        <li>브라우저 확인 완료 — 상태 카드: 북마크 361개 · 노트 3개</li>
+        <li>포크 PR #3 머지 → feat/weekly-insight</li>
+        <li>테스트 784개 통과</li>
+      </ul>
+    </div>
+  </div>
+  <div class="footer"><span>슬라이드 31의 "동기화 버튼 대기" 항목이 이렇게 닫혔다</span><span>34 / 37</span></div>
+</section>
+
+<!-- 35. 팀 PR #11 현황 -->
+<section class="slide dark" id="s35">
+  <p class="eyebrow">팀 PR #11 현황 (2026-11-13 기준)</p>
+  <h2>팀 저장소에 올라갔다. 리뷰를 기다린다</h2>
+  <p class="lead muted">base <code>main</code> ← <code>jiyeonLeeLuda:feat/weekly-insight</code> · M0~M10 전부</p>
+  <div class="grid3">
+    <div class="card dark" style="border:1px solid #3a4651"><span class="num">61 커밋</span><h3 style="color:var(--orange)">+20,064 / −169</h3><p class="muted small">104 파일</p></div>
+    <div class="card dark" style="border:1px solid #3a4651"><span class="num">열림</span><h3 style="color:var(--orange)">충돌 없음</h3><p class="muted small">팀 main은 그 사이 변경 없음</p></div>
+    <div class="card dark" style="border:1px solid #3a4651"><span class="num">리뷰 0 · 코멘트 0</span><h3 style="color:var(--orange)">리뷰어 미지정 · CI 미실행</h3><p class="muted small">포크 PR Actions 승인 또는 저장소 Actions 설정 필요</p></div>
+  </div>
+  <p class="lead">요청 사항 <span class="pill">리뷰어 지정 · Actions 승인 · 머지 순서 결정</span></p>
+  <div class="footer"><span>https://github.com/orocapangyo/reachy_mini_conversation_app/pull/11</span><span>35 / 37</span></div>
+</section>
+
+<!-- 36. 오늘 발표 요약 -->
+<section class="slide" id="s36">
+  <p class="eyebrow">오늘 발표 요약</p>
+  <h2>무엇을 만들었나</h2>
+  <p class="lead muted">Chrome에 저장한 북마크를 리치미니가 읽고 요약해 대화를 열고, 그 대화가 옵시디언 노트로 남는 기능 1을 설계부터 팀 PR까지 끝냈다.</p>
+  <div class="row">
+    <div class="card"><span class="num">11</span><p class="muted small">마일스톤 완료 (M0~M10)</p></div>
+    <div class="card"><span class="num">784</span><p class="muted small">테스트 통과</p></div>
+    <div class="card"><span class="num">6</span><p class="muted small">시나리오 통과</p></div>
+    <div class="card"><span class="num">61</span><p class="muted small">커밋 (팀 PR #11)</p></div>
+  </div>
+  <div class="row">
+    <div class="card dark">
+      <h3 style="color:var(--orange)">실기기에서 찾은 문제 3 → 고쳤다</h3>
+      <ul class="small">
+        <li><b>도구 응답 묶음 버그</b> — 긴 도구가 도는 동안 봇이 침묵 → 서버 메시지 단위로 분리</li>
+        <li><b>배치 지연의 진짜 원인</b> — SDK 재시도가 503을 숨김 → 30초 타임아웃 · 2회 재시도 (14분 54초 → 17.6초)</li>
+        <li><b>Chrome 계정 북마크</b> — <code>AccountBookmarks</code>도 읽는다</li>
+      </ul>
+    </div>
+    <div class="card">
+      <h3>범위 밖 발견 4 → 담당 전달 · 미해결</h3>
+      <ul class="muted small">
+        <li>웨이크 워드 오탐 (슬립 5초 뒤 자동 기상)</li>
+        <li>Google Meet 음성 유입</li>
+        <li>thinking 텍스트가 전사에 혼입</li>
+        <li>웹캠을 실제로 여는 비전 테스트</li>
+      </ul>
+    </div>
+  </div>
+  <div class="footer"><span>브랜치 feat/weekly-insight · SDD 0.9.1</span><span>36 / 37</span></div>
+</section>
+
+<!-- 37. 다음 단계 -->
+<section class="slide dark" id="s37">
+  <p class="eyebrow">다음 단계</p>
+  <h2>팀에 내놨다. 다음은 리뷰를 받는 것</h2>
+  <div class="row">
+    <div class="card dark" style="border:1px solid #3a4651">
+      <h3 style="color:var(--orange)">바로 다음</h3>
+      <ul class="small">
+        <li>팀 PR #11 리뷰 · CI 승인 · 머지</li>
+        <li>아키텍처 다이어그램(<code>docs/scheme.mmd</code>) 갱신</li>
+        <li>시나리오 3 추가 측정</li>
+        <li class="muted">그다음 — "최근 1~2건 먼저 요약" 아이디어 · 회의 모드(마이크 게이팅) · <b>기능 2</b> 에피소드 기억 층</li>
+      </ul>
+    </div>
+    <div class="card dark" style="border:1px solid #3a4651">
+      <h3 style="color:var(--orange)">이번 범위 밖</h3>
+      <ul class="muted small"><li>봇이 먼저 인사이트 제안</li><li>기능 2 라포 지표, 기능 2+ 성격 진화</li><li>Safari · Firefox, 브라우저 확장, CLI</li><li>RAG, 유튜브 자막 · PDF 추출, 실기기 포팅</li></ul>
+    </div>
+    <div class="card dark" style="border:1px solid #3a4651">
+      <h3 style="color:var(--orange)">스터디에 묻고 싶은 것</h3>
+      <ul class="small"><li>봇이 링크를 읽고 요약한 걸 음성으로 들을 때, 어디까지가 "재밌는 대화"이고 어디부터 "브리핑"처럼 느껴질까?</li><li>라포 지표를 무엇으로 볼지</li><li>MBTI 외에 성격 초기값으로 쓸 만한 틀이 있을지</li></ul>
+    </div>
+  </div>
+  <div class="footer"><span>설계 문서: oss_plan/2026-11-06-weekly-insight-design.md</span><span>37 / 37</span></div>
+</section>
+
+<div class="nav-hint">← → 또는 ↑ ↓ 로 넘기기</div>
+<script>
+  (function () {
+    var slides = Array.prototype.slice.call(document.querySelectorAll('.slide'));
+    function current() {
+      var y = window.scrollY + window.innerHeight / 2;
+      for (var i = 0; i < slides.length; i++) {
+        var top = slides[i].offsetTop;
+        if (y >= top && y < top + slides[i].offsetHeight) return i;
+      }
+      return 0;
+    }
+    function go(i) {
+      i = Math.max(0, Math.min(slides.length - 1, i));
+      slides[i].scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
+    document.addEventListener('keydown', function (e) {
+      if (e.key === 'ArrowRight' || e.key === 'ArrowDown' || e.key === 'PageDown' || e.key === ' ') { e.preventDefault(); go(current() + 1); }
+      else if (e.key === 'ArrowLeft' || e.key === 'ArrowUp' || e.key === 'PageUp') { e.preventDefault(); go(current() - 1); }
+      else if (e.key === 'Home') { go(0); }
+      else if (e.key === 'End') { go(slides.length - 1); }
+    });
+  })();
+</script>
+</body>
+</html>
