@@ -49,7 +49,9 @@ Pollen Robotics의 [reachy_mini_conversation_app](https://github.com/pollen-robo
 
 ## 빠른 시작 (한국어 데모)
 
-1. 설치는 아래 [Installation](#installation) 참고 (`uv sync` 또는 `pip install -e .`)
+1. 클론 전에 `git lfs install`을 한 번 실행합니다. `.gitattributes`가 png·svg·gif·pkl·bin 등을 Git LFS로 보내므로,
+   LFS 없이 받으면 이미지·모델 파일이 포인터 텍스트로만 내려옵니다. 설치는 아래 [Installation](#installation) 참고
+   (`uv sync` 또는 `pip install -e .`)
 2. `.env.example`을 `.env`로 복사하고 다음을 설정:
 
 ```env
@@ -64,19 +66,61 @@ REACHY_MINI_HOST=192.168.0.144
 REACHY_MINI_AUTO_START_DAEMON=1
 ```
 
-3. 실행:
+   Gemini 백엔드로 DeskMate(위클리 인사이트)를 시뮬레이터에서 돌리는 최소 구성은 세 줄입니다
+   (코드 기본값은 `hf`, `.env.example` 기본값은 `openai`라서 백엔드를 꼭 적어야 합니다):
 
-```bash
-reachy-mini-conversation-app --ui    # 웹 UI: http://127.0.0.1:7860/
+```env
+CONVERSATION_BACKEND=gemini
+GEMINI_API_KEY=AIza...
+REACHY_MINI_HOST=sim
 ```
 
-4. 대화 → **"종료해 줘"** → 취침 대기 → **"깨어나 리치미니"** → 대화 재개.
+3. 데몬을 먼저 띄웁니다. 앱은 데몬에 붙지 못하면 그대로 종료하므로 설정 웹 UI도 뜨지 않습니다.
+   실물이 없으면 아래 [시뮬레이터 데몬 띄우기](#시뮬레이터-데몬-띄우기) 참고.
+4. 실행:
+
+```bash
+reachy-mini-conversation-app --ui                # 웹 UI: http://127.0.0.1:7860/
+reachy-mini-conversation-app --ui --no-camera    # 카메라가 없는 PC
+```
+
+   첫 시작은 `http://127.0.0.1:7860/#/settings`가 응답하기까지 90초쯤 걸립니다.
+
+5. 대화 → **"종료해 줘"** → 취침 대기 → **"깨어나 리치미니"** → 대화 재개.
    끝낼 때는 콘솔에서 `Ctrl+C`.
-5. (선택) Chrome 북마크 위클리 인사이트(DeskMate)는 웹 UI의 **Settings → DeskMate** 섹션에서
+6. (선택) Chrome 북마크 위클리 인사이트(DeskMate)는 웹 UI의 **Settings → DeskMate** 섹션에서
    버튼만으로 첫 세팅을 끝낼 수 있습니다 → [DeskMate 첫 세팅](#deskmate-첫-세팅-웹-ui-설정-대시보드).
 
 > [!NOTE]
 > Windows에서는 실행 전 `$env:PYTHONUTF8 = "1"`을 설정하면 한국어 로그 깨짐을 방지할 수 있습니다.
+
+### 시뮬레이터 데몬 띄우기
+
+실물 로봇 없이 개발·시연할 때는 별도 터미널에서 시뮬레이터 데몬을 먼저 띄우고 `.env`에 `REACHY_MINI_HOST=sim`을
+둡니다. 두 가지 방법이 있습니다.
+
+**추가 설치 없이 (뷰어 없음)** — `uv.lock` 그대로 동작하고, 설정 대시보드와 도구 테스트에는 충분합니다:
+
+```bash
+reachy-mini-daemon --mockup-sim --headless --no-media
+```
+
+`--no-media`를 주면 SDK가 `WARNING reachy_mini.media.media_manager | Audio system is not initialized.`를 초당 수천 번
+찍어 몇 분 만에 로그가 수백 MB가 됩니다. 짧게 확인할 때만 쓰고 몇 시간씩 켜 두지 마세요. `--no-media`를 빼면 데몬이
+Mac의 기본 스피커·마이크를 잡습니다.
+
+**MuJoCo 뷰어로 모션 보기** — `mujoco`는 `uv.lock`에 없으므로 `uv sync` 뒤에 따로 설치합니다. `uv sync`를 다시 하면
+지워지니 그때 다시 설치하세요:
+
+```bash
+uv pip install "reachy-mini[mujoco]"
+
+# macOS: 뷰어는 실제 Terminal 창에서 mjpython으로만 뜹니다
+mjpython "$(which reachy-mini-daemon)" --sim
+
+# Windows / Linux
+reachy-mini-daemon --sim
+```
 
 ## DeskMate 첫 세팅 (웹 UI 설정 대시보드)
 
@@ -92,7 +136,9 @@ DeskMate는 Chrome 북마크를 마크다운 저장소(옵시디언 볼트)로 �
 있고, 입력하는 동안 폴더가 있는지·쓸 수 있는지·이미 든 북마크 수가 한 줄로 갱신됩니다. **폴더 만들기·적용**을 누르면
 없는 폴더를 하위까지 만들고 `.env`에 저장합니다(상대 경로, Chrome User Data 안쪽, 홈 폴더 자체, 드라이브 루트는
 거부합니다). 이어서 **.env에 적용**으로 체크한 프로필을 저장하면 상태 카드가 "설정됨"으로 바뀌고 재시작은 필요
-없습니다. 마지막으로 **동기화 실행**을 누르면 버튼이 잠기고 스피너가 돌다가 프로필별 created/updated/archived/excluded
+없습니다. 버튼이 쓰는 `.env`는 앱을 터미널(`reachy-mini-conversation-app --ui`)에서 띄웠다면 앱이 읽어 들인 그 파일
+(현재 폴더에서부터 찾은 `.env`, 없으면 현재 폴더에 새로 만듭니다)이고, Reachy 대시보드에서 띄웠다면 앱 인스턴스 폴더의
+`.env`입니다. 마지막으로 **동기화 실행**을 누르면 버튼이 잠기고 스피너가 돌다가 프로필별 created/updated/archived/excluded
 표와 경고가 나옵니다. 이제 로봇에게 "이번 주 북마크 얘기하자"라고 말해 보세요.
 
 이 화면이 `.env`에 쓰는 값은 세 가지뿐입니다: 저장소 경로 `DESKMATE_BOOKMARK_REPO`, 읽을 프로필 목록
@@ -100,7 +146,8 @@ DeskMate는 Chrome 북마크를 마크다운 저장소(옵시디언 볼트)로 �
 터미널이 더 편하다면 같은 일을 `python -m deskmate.sync --discover`(프로필 탐색과 `.env` 줄 출력)와
 `python -m deskmate.sync`(동기화)로 할 수 있습니다.
 
-실제 Chrome 없이 시뮬레이터로 시연하려면 같은 섹션의 **데모 데이터 준비**를 누르세요. 대상 폴더(기본
+실제 Chrome 없이 시뮬레이터([시뮬레이터 데몬 띄우기](#시뮬레이터-데몬-띄우기))로 시연하려면 같은 섹션의
+**데모 데이터 준비**를 누르세요. 대상 폴더(기본
 `~/deskmate-demo`)에 요약된 북마크 3개와 ready 인사이트 노트 1개, 가짜 `User Data`가 복사되고, 돌려받은 값은
 **이 값을 .env에 적용** 버튼 한 번으로 반영됩니다(이미 있는 폴더는 덮어쓰지 않고 거부하며, 픽스처는 저장소
 체크아웃에만 있습니다). 그다음 Personalities 화면에서 `deskmate_ko`를 기본 페르소나로 지정하고 "10월 31일부터
@@ -178,6 +225,7 @@ The app connects the user, AI services, and robot hardware:
 
 > [!IMPORTANT]
 > Install [Reachy Mini's SDK](https://github.com/pollen-robotics/reachy_mini/) before using this app.<br>
+> Run `git lfs install` before cloning: `.gitattributes` keeps images, `.pkl` and `.bin` files in Git LFS.<br>
 > Windows support is currently experimental and has not been extensively tested. Use with caution.
 
 <details open>
@@ -186,13 +234,13 @@ The app connects the user, AI services, and robot hardware:
 Set up with [uv](https://docs.astral.sh/uv/):
 
 ```bash
-# macOS (Homebrew)
-uv venv --python /opt/homebrew/bin/python3.12 .venv
-
-# Linux / Windows (Python in PATH)
+# Any OS: uv downloads CPython 3.12 when it is not installed
 uv venv --python python3.12 .venv
 
-source .venv/bin/activate
+# macOS, only if you want the Homebrew interpreter (fails with "No interpreter found" when the path is missing)
+# uv venv --python /opt/homebrew/bin/python3.12 .venv
+
+source .venv/bin/activate    # Windows: .venv\Scripts\activate
 uv sync
 ```
 
@@ -302,7 +350,7 @@ reachy-mini-conversation-app
 ```
 
 > [!TIP]
-> Make sure the Reachy Mini daemon is running before launching the app. If you see a `TimeoutError`, it means the daemon isn't started. See [Reachy Mini's SDK](https://github.com/pollen-robotics/reachy_mini/) for setup instructions. (이 fork에서는 `REACHY_MINI_AUTO_START_DAEMON=1`로 원격 데몬을 자동 시작할 수 있습니다.)
+> Make sure the Reachy Mini daemon is running before launching the app. If you see a `TimeoutError`, it means the daemon isn't started. See [Reachy Mini's SDK](https://github.com/pollen-robotics/reachy_mini/) for setup instructions. (이 fork에서는 `REACHY_MINI_AUTO_START_DAEMON=1`로 원격 데몬을 자동 시작할 수 있고, 시뮬레이터는 위 [시뮬레이터 데몬 띄우기](#시뮬레이터-데몬-띄우기) 참고.)
 
 The app runs in console mode. Add `--ui` to serve the web interface at http://127.0.0.1:7860/.
 
