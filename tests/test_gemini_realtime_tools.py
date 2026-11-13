@@ -11,6 +11,7 @@ from typing import Any
 from unittest.mock import MagicMock
 
 import pytest
+from google.genai import types
 
 from reachy_mini_conversation_app.gemini_realtime import (
     GeminiRealtimeHandler,
@@ -491,3 +492,63 @@ async def test_session_start_clears_tool_call_group_state() -> None:
     assert handler._in_flight_tool_calls == set()
     assert handler._tool_call_groups == {}
     assert handler._call_id_to_name == {}
+
+
+# ---------------------------------------------------------------------------
+# 7. Fire-and-forget tools: NON_BLOCKING declaration + SILENT response
+# ---------------------------------------------------------------------------
+
+
+def _declaration(name: str) -> types.FunctionDeclaration:
+    """Return the Gemini declaration generated for one registered tool."""
+    declarations = tool_specs_to_gemini(get_tool_specs())[0].function_declarations or []
+    return next(d for d in declarations if d.name == name)
+
+
+def test_fire_and_forget_tool_is_declared_non_blocking() -> None:
+    """Tools with needs_response=False are NON_BLOCKING; tools whose result is spoken keep the default."""
+    assert _declaration("play_emotion").behavior == types.Behavior.NON_BLOCKING
+    assert _declaration("get_schedule").behavior is None
+
+
+async def _deliver_single(handler: GeminiRealtimeHandler, notification: ToolNotification) -> Any:
+    """Register one in-flight call, deliver its result and return the FunctionResponse sent."""
+    fake_session = FakeSession()
+    handler.connection = fake_session  # type: ignore[assignment]
+    fake_manager = FakeToolManager()
+    fake_manager.start_up(tool_callbacks=[handler._handle_tool_result])
+    handler.tool_manager = fake_manager  # type: ignore[assignment]
+    handler._in_flight_tool_calls.add(notification.id)
+    handler._call_id_to_name[notification.id] = notification.tool_name
+
+    await fake_manager.deliver(notification)
+
+    assert len(fake_session.tool_responses) == 1
+    return fake_session.tool_responses[0][0]
+
+
+@pytest.mark.asyncio
+async def test_fire_and_forget_result_is_sent_silent() -> None:
+    """Regression: a play_emotion result must not prompt a new generation (the model repeated its reply)."""
+    sent = await _deliver_single(
+        _make_handler(), _make_notification("call_1", "play_emotion", result={"status": "queued", "emotion": "happy"})
+    )
+    assert sent.scheduling == types.FunctionResponseScheduling.SILENT
+
+
+@pytest.mark.asyncio
+async def test_fire_and_forget_error_is_not_silent() -> None:
+    """An error from a fire-and-forget tool must still be spoken, so it is not SILENT."""
+    sent = await _deliver_single(
+        _make_handler(), _make_notification("call_1", "play_emotion", result={"error": "Emotion system not available"})
+    )
+    assert sent.scheduling is None
+
+
+@pytest.mark.asyncio
+async def test_spoken_result_tool_has_no_scheduling() -> None:
+    """Tools whose result the model must relay keep the default scheduling (generation is triggered)."""
+    sent = await _deliver_single(
+        _make_handler(), _make_notification("call_1", "get_schedule", result={"events": ["standup 10:00"]})
+    )
+    assert sent.scheduling is None

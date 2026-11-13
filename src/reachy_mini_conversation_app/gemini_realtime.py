@@ -141,16 +141,24 @@ def tool_specs_to_gemini(tool_specs: list[ToolSpec]) -> list["types.Tool"]:
 
     JSON Schema keys not supported by Gemini are silently dropped (allowlist:
     type/description/enum/properties/required/items).
+
+    Tools that opt out of a spoken follow-up (``needs_response = False``) are declared
+    NON_BLOCKING so their result can later be sent with ``scheduling=SILENT``: a BLOCKING
+    result always triggers a new generation, which made the model repeat the sentence it
+    had just said whenever a turn mixed speech with e.g. play_emotion.
     """
+    registered_tools = core_tools.get_tools()
     declarations: list[types.FunctionDeclaration] = []
     for spec in tool_specs:
         params_raw = spec.get("parameters", {})
         schema = _build_schema(params_raw)
+        tool = registered_tools.get(spec["name"])
         declarations.append(
             types.FunctionDeclaration(
                 name=spec["name"],
                 description=spec.get("description", ""),
                 parameters=schema,
+                behavior=None if tool is None or tool.needs_response else types.Behavior.NON_BLOCKING,
             )
         )
     if not declarations:
@@ -570,7 +578,18 @@ class GeminiRealtimeHandler(ConversationHandler):
         if completed_tool.is_idle_tool_call:
             return
 
-        group.responses.append(types.FunctionResponse(id=call_id, name=tool_name, response=result_dict))
+        # Mirrors the HF handler: errors are always surfaced, silent-opt-out tools only add
+        # their result to the context. Without SILENT, Gemini treats a FunctionResponse
+        # as a prompt to generate and repeats the reply it gave alongside the call.
+        tool = core_tools.get_tools().get(tool_name)
+        scheduling = (
+            types.FunctionResponseScheduling.SILENT
+            if tool is not None and not tool.needs_response and "error" not in result_dict
+            else None
+        )
+        group.responses.append(
+            types.FunctionResponse(id=call_id, name=tool_name, response=result_dict, scheduling=scheduling)
+        )
 
         # Flush only once every call in *this* group has completed.
         if group.pending:
